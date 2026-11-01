@@ -182,6 +182,7 @@ class AppViewModel(
                 .filterNotNull()
                 .collect { link ->
                     links.consume(link)
+                    if (!link.current()) return@collect
                     cancelPendingCall()
                     if (link.draft?.start == DraftStart.VoiceChat) {
                         openDefaultCall()
@@ -191,7 +192,10 @@ class AppViewModel(
                     val bot = link.bot
                     val stored = link.storedSessionId
                     when {
-                        bot != null -> openBotLink(bot, link.title, stored, link.draft, stored?.let { lastLook(it, profile = bot) })
+                        bot != null -> {
+                            val readUpTo = stored?.let { lastLook(it, profile = bot) }
+                            if (link.current()) openBotLink(bot, link.title, stored, link.draft, readUpTo)
+                        }
                         stored == null -> newChat(link.draft)
                         open != stored -> openSession(stored, link.title ?: "Chat", lastLook(stored, currentProfile()))
                         // Usually the notification is for the chat left open: the reply came in while away.

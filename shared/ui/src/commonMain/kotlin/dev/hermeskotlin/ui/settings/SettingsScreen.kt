@@ -269,6 +269,7 @@ fun SettingsScreen(
             viewModel.runConnectionCheck()
         },
         push = push,
+        pushAvailable = viewModel.pushAvailable,
         pushTest = pushTest,
         onPushAnywhere = viewModel::setPushAnywhere,
         onPushTest = viewModel::sendPushTest,
@@ -370,6 +371,7 @@ internal fun SettingsView(
     gatewayName: String = gatewayUrl.substringAfter("://").trimEnd('/'),
     onCheckConnection: () -> Unit = {},
     push: PushStatus = PushStatus(),
+    pushAvailable: Boolean = !isDesktop,
     pushTest: Boolean? = null,
     onPushAnywhere: (Boolean) -> Unit = {},
     onPushTest: () -> Unit = {},
@@ -742,9 +744,8 @@ internal fun SettingsView(
                             icon = Lucide.Vibrate,
                         )
                     }
-                    // The phone's push through ntfy; the desktop has no way to receive it yet.
-                    if (!isDesktop) Divider()
-                    if (!isDesktop) SwitchRow(
+                    if (pushAvailable) Divider()
+                    if (pushAvailable) SwitchRow(
                         title = "Notifications anywhere",
                         detail = pushDetail(settings.pushAnywhere, push),
                         checked = settings.pushAnywhere,
@@ -753,11 +754,11 @@ internal fun SettingsView(
                         icon = Lucide.Globe,
                     )
                     val pushUpdate = push.update
-                    if (settings.pushAnywhere && pushUpdate != null) {
+                    if (pushAvailable && settings.pushAnywhere && pushUpdate != null) {
                         Divider()
                         PluginUpdateRow(pushUpdate, onPushUpdate)
                     }
-                    if (settings.pushAnywhere && push.state == PushStatus.State.On) {
+                    if (pushAvailable && settings.pushAnywhere && push.state == PushStatus.State.On) {
                         Divider()
                         ActionRow(
                             when (pushTest) {
