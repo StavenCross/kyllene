@@ -12,10 +12,15 @@ on:
         description: Optional available Freedesktop runtime branch, e.g. 27.08; blank uses manifest
         type: string
         default: ''
+      permission_profile:
+        description: Reviewed sandbox profile (PulseAudio grants microphone and audio output)
+        type: choice
+        options: [baseline, pulseaudio]
+        default: baseline
 permissions:
   contents: read
 concurrency:
-  group: fork-flatpak-${{ inputs.source_ref || 'master' }}-${{ inputs.runtime || 'default' }}
+  group: fork-flatpak-${{ inputs.source_ref || 'master' }}-${{ inputs.runtime || 'default' }}-${{ inputs.permission_profile || 'baseline' }}
   cancel-in-progress: false
 jobs:
   qualification:
@@ -32,6 +37,7 @@ jobs:
         env:
           SOURCE_REF: ${{ inputs.source_ref || 'master' }}
           RUNTIME: ${{ inputs.runtime }}
+          PERMISSION_PROFILE: ${{ inputs.permission_profile || 'baseline' }}
         run: |
           git check-ref-format "refs/heads/$SOURCE_REF"
           git clone --filter=blob:none --no-checkout https://github.com/StavenCross/kyllene.git source
@@ -47,8 +53,9 @@ jobs:
           mkdir package
           git -C source archive "$source_sha" | tar -x -C package
           git -C source archive "$packaging_sha" packaging/flatpak | tar -x -C package
-          python3 tooling/.github/fork-tools/qualification.py select package/packaging/flatpak/io.github.Giton22.Kyllene.Devel.json --sha "$source_sha" --ref "refs/heads/$SOURCE_REF" --runtime "$RUNTIME"
+          python3 tooling/.github/fork-tools/qualification.py select package/packaging/flatpak/io.github.Giton22.Kyllene.Devel.json --sha "$source_sha" --ref "refs/heads/$SOURCE_REF" --runtime "$RUNTIME" --permission-profile "$PERMISSION_PROFILE"
           echo "Source: $source_sha; packaging: $packaging_sha" >> "$GITHUB_STEP_SUMMARY"
+          echo "Permission profile: $PERMISSION_PROFILE" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
           distribution: jetbrains
@@ -81,7 +88,9 @@ jobs:
           cd package || exit 1
           flatpak-builder --user --repo=repo build packaging/flatpak/fork-ci.json
       - name: Check exported permissions and package privacy
-        run: python3 tooling/.github/fork-tools/qualification.py scan package/build
+        env:
+          PERMISSION_PROFILE: ${{ inputs.permission_profile || 'baseline' }}
+        run: python3 tooling/.github/fork-tools/qualification.py scan package/build --permission-profile "$PERMISSION_PROFILE"
       - name: Install and upgrade in a disposable user session
         run: dbus-run-session -- bash tooling/.github/fork-tools/install-smoke.sh package/build package/repo
       - name: Record qualification scope

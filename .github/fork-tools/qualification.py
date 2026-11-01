@@ -10,6 +10,7 @@ import re
 import zipfile
 
 ALLOWED = {'--share=network', '--share=ipc', '--socket=x11', '--device=dri'}
+PROFILES = {'baseline': ALLOWED, 'pulseaudio': ALLOWED | {'--socket=pulseaudio'}}
 PRIVATE = {'agents.md', 'internal_docs', 'local-docs', 'local-tests', '.git', '.env',
            'local.properties', 'gradle.properties.private'}
 SECRET = re.compile(rb'(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,}|'
@@ -17,16 +18,24 @@ SECRET = re.compile(rb'(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,
 MAX_ENTRY = 128 * 1024 * 1024
 
 
-def permissions(manifest):
-    unexpected = set(manifest.get('finish-args', [])) - ALLOWED
+def allowed_permissions(profile):
+    if profile not in PROFILES:
+        raise ValueError('Unknown permission profile: ' + repr(profile))
+    return PROFILES[profile]
+
+
+def permissions(manifest, profile='baseline'):
+    unexpected = set(manifest.get('finish-args', [])) - allowed_permissions(profile)
     if unexpected:
         raise ValueError('Unreviewed sandbox permission: ' + repr(sorted(unexpected)))
 
 
-def metadata_permissions(text):
+def metadata_permissions(text, profile='baseline'):
     config = configparser.ConfigParser(interpolation=None)
     config.read_string(text)
     allowed = {'shared': {'network', 'ipc'}, 'sockets': {'x11'}, 'devices': {'dri'}}
+    allowed['sockets'] = {p.removeprefix('--socket=') for p in allowed_permissions(profile)
+                          if p.startswith('--socket=')}
     for section in config.sections():
         if section in ('Session Bus Policy', 'System Bus Policy', 'Environment'):
             if dict(config[section]):
@@ -84,13 +93,13 @@ def scan(root):
     print('Package hygiene scan passed (known private paths and credential patterns).')
 
 
-def select(manifest, sha, ref, runtime):
+def select(manifest, sha, ref, runtime, profile='baseline'):
     if not re.fullmatch('[0-9a-f]{40}', sha):
         raise ValueError('Expected exact source commit')
     if runtime and not re.fullmatch(r'\d{2}\.\d{2}', runtime):
         raise ValueError('Expected runtime branch YY.MM')
     result = copy.deepcopy(manifest)
-    permissions(result)
+    permissions(result, profile)
     source = result['modules'][0]['sources'][0]
     if source['type'] != 'git':
         raise ValueError('Expected pinned Git source')
@@ -108,14 +117,16 @@ if __name__ == '__main__':
     p.add_argument('--sha', required=True)
     p.add_argument('--ref', required=True)
     p.add_argument('--runtime', default='')
+    p.add_argument('--permission-profile', choices=PROFILES, default='baseline')
     p = sub.add_parser('scan')
     p.add_argument('build', type=Path)
+    p.add_argument('--permission-profile', choices=PROFILES, default='baseline')
     args = parser.parse_args()
     if args.mode == 'select':
-        output = select(json.loads(args.manifest.read_text()), args.sha, args.ref, args.runtime)
+        output = select(json.loads(args.manifest.read_text()), args.sha, args.ref, args.runtime, args.permission_profile)
         args.manifest.with_name('fork-ci.json').write_text(json.dumps(output, indent=2) + '\n')
-        print('Selected source', args.sha, 'runtime', output['runtime-version'])
+        print('Selected source', args.sha, 'runtime', output['runtime-version'], 'permission profile', args.permission_profile)
     else:
-        metadata_permissions((args.build / 'metadata').read_text())
+        metadata_permissions((args.build / 'metadata').read_text(), args.permission_profile)
         scan(args.build / 'files')
         scan(args.build / 'export')

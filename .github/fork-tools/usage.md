@@ -62,7 +62,13 @@ A candidate runtime must actually exist on Flathub; an unavailable branch fails.
 
 The workflow checks the manifest and exported permissions against the reviewed
 network/IPC/X11/DRI baseline. New capabilities need an explicit fork-policy change
-alongside their feature review. It scans exported files and ZIP/JAR/JMOD contents
+alongside their feature review. Manual runs may explicitly select the reviewed
+`pulseaudio` permission profile, which permits only the additional PulseAudio
+socket (microphone and audio output). The default and scheduled profile remains
+`baseline`; it still rejects that socket. Selection and exported-metadata checks
+use the same explicit profile, recorded in the run summary. Neither profile permits
+unrelated filesystem, bus, environment, device or socket widening.
+It scans exported files and ZIP/JAR/JMOD contents
 for internal-document/config paths and known credential patterns. This is a
 bounded leak detector, not proof that arbitrary personal information is absent.
 No build bundle, profile or unfiltered log is uploaded as an Actions artifact.

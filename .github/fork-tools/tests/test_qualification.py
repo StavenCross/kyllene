@@ -10,6 +10,50 @@ spec.loader.exec_module(q)
 
 
 class QualificationTest(unittest.TestCase):
+    def test_pulseaudio_requires_an_explicit_profile_without_changing_baseline(self):
+        manifest = {'finish-args': sorted(q.ALLOWED | {'--socket=pulseaudio'})}
+        metadata = '[Context]\nshared=network;ipc;\nsockets=x11;pulseaudio;\ndevices=dri;\n'
+        for check, value in [(q.permissions, manifest), (q.metadata_permissions, metadata)]:
+            with self.assertRaisesRegex(ValueError, 'permission'):
+                check(value)
+            check(value, profile='pulseaudio')
+            with self.assertRaisesRegex(ValueError, 'permission'):
+                check(value)
+        self.assertNotIn('--socket=pulseaudio', q.ALLOWED)
+
+    def test_both_profiles_reject_other_permission_widening(self):
+        for profile in ['baseline', 'pulseaudio']:
+            for extra in ['--filesystem=home', '--socket=wayland', '--socket=session-bus', '--device=all']:
+                with self.subTest(profile=profile, extra=extra), self.assertRaisesRegex(ValueError, 'permission'):
+                    q.permissions({'finish-args': [extra]}, profile=profile)
+            for metadata in ['[Context]\nfilesystems=host;\n', '[Context]\nsockets=wayland;\n',
+                             '[Session Bus Policy]\norg.freedesktop.secrets=talk\n', '[Environment]\nX=1\n']:
+                with self.subTest(profile=profile, metadata=metadata), self.assertRaisesRegex(ValueError, 'permission'):
+                    q.metadata_permissions(metadata, profile=profile)
+
+    def test_unknown_profile_fails_closed(self):
+        for check, value in [(q.permissions, {}), (q.metadata_permissions, '[Context]\n')]:
+            with self.assertRaisesRegex(ValueError, 'profile'):
+                check(value, profile='unreviewed')
+
+    def test_workflow_profile_is_explicit_for_selection_scan_and_summary(self):
+        import yaml
+        workflow = yaml.safe_load((Path(__file__).resolve().parents[2] / 'workflows/fork-flatpak.yml').read_text())
+        trigger = workflow.get('on', workflow.get(True))
+        choice = trigger['workflow_dispatch']['inputs']['permission_profile']
+        self.assertEqual(choice['default'], 'baseline')
+        self.assertEqual(choice['options'], ['baseline', 'pulseaudio'])
+        checked = 0
+        for step in workflow['jobs']['qualification']['steps']:
+            command = step.get('run', '')
+            if 'qualification.py select ' in command or 'qualification.py scan ' in command:
+                self.assertEqual(step['env']['PERMISSION_PROFILE'], "${{ inputs.permission_profile || 'baseline' }}")
+                self.assertIn('--permission-profile "$PERMISSION_PROFILE"', command)
+                checked += 1
+            if 'qualification.py select ' in command:
+                self.assertIn('Permission profile:', command)
+        self.assertEqual(checked, 2)
+
     def test_permission_increase_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'permission'):
             q.permissions({'finish-args': ['--filesystem=home']})
