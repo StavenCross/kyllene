@@ -685,8 +685,9 @@ internal fun SettingsView(
                     PluginInstallDialog(
                         visible = installAsked,
                         feature = "Notifications anywhere",
-                        what = "It watches your bots' chats and sends each new reply to this phone, end-to-end " +
-                            "encrypted through ntfy.sh.",
+                        what = "It watches your bots' chats and sends each new reply to " +
+                            (if (isDesktop) "this computer while Kyllene is running" else "this phone") +
+                            ", end-to-end encrypted through ntfy.sh.",
                         onDismiss = { installAsked = false },
                     ) {
                         installAsked = false
@@ -889,7 +890,8 @@ internal fun suggestionsDetail(on: Boolean, plugin: SuggestionsPlugin): String {
 private fun pushDetail(on: Boolean, push: PushStatus): String {
     if (!on) {
         return "Hear from your bots even off your gateway's network, end-to-end encrypted through ntfy.sh. " +
-            "Installs the herald-push plugin on the gateway. Keeps a quiet notification."
+            "Installs the herald-push plugin on the gateway. " +
+            (if (isDesktop) "Receives while Kyllene is running." else "Keeps a quiet notification.")
     }
     return when (push.state) {
         PushStatus.State.On -> push.detail ?: "On. Bot messages come end-to-end encrypted through ntfy.sh; it only sees scrambled data."
