@@ -131,7 +131,10 @@ fun main(args: Array<String>) {
     // A `herald://` link Windows started this launch with: a notification's, or one from a browser.
     val launchLink = args.firstOrNull { it.startsWith("${AppLink.DESKTOP_SCHEME}:", ignoreCase = true) }
     // A second launch brings the running Herald forward, with its link, instead of opening another.
-    val instance = SingleInstance.claim(appDataDir, launchLink) ?: exitProcess(0)
+    val flatpakRuntime = System.getProperty("os.name") == "Linux" && File("/.flatpak-info").isFile
+    val startupCapable = flatpakRuntime && java.awt.SystemTray.isSupported()
+    val quietLaunch = backgroundInvocation(args, flatpakRuntime)
+    val instance = SingleInstance.claim(appDataDir, launchLink, foreground = !quietLaunch) ?: exitProcess(0)
     val koin = startKoin {
         modules(sharedModules + desktopModule)
         if (!unlockDesktopStorage(
@@ -147,6 +150,11 @@ fun main(args: Array<String>) {
     useAppTextContextMenu()
     val links = koin.get<ChatLinks>()
     koin.get<PushSetup>().start()
+    val portal = BackgroundPortal()
+    val startup = if (quietLaunch && startupCapable) runBlocking {
+        if (portal.available()) BackgroundStartup.load(koin.get(), portal::request) else null
+    } else null
+    val startHidden = startup != null && backgroundLaunch(args, startup.state.value.choice, startupCapable)
     val saved = WindowMemory.read(koin.get())
     // The same mark as docs/logo.svg, for the title bar, the taskbar and the tray.
     val icon = Thread.currentThread().contextClassLoader.getResourceAsStream("herald.svg")!!.use { loadSvgPainter(it, Density(1f)) }
@@ -159,7 +167,14 @@ fun main(args: Array<String>) {
         val shortcuts = remember { ShortcutBus() }
         val back = remember { DesktopBack() }
         val settings = settingsStore.settings.collectAsState().value ?: AppSettings()
-        var windowShown by remember { mutableStateOf(true) }
+        var windowShown by remember { mutableStateOf(!startHidden) }
+        var startupControl by remember { mutableStateOf(startup) }
+        val startupState = startupControl?.state?.collectAsState()?.value
+        LaunchedEffect(Unit) {
+            if (startupCapable && !quietLaunch && portal.available()) {
+                startupControl = BackgroundStartup.load(koin.get(), portal::request)
+            }
+        }
         var frame by remember { mutableStateOf<Frame?>(null) }
         val focused = remember { MutableStateFlow(false) }
         var quickOpen by remember { mutableStateOf(false) }
@@ -399,6 +414,13 @@ fun main(args: Array<String>) {
                 }
                 Item(stringResource(Res.string.tray_quick_entry), onClick = { quickOpen = true })
                 Separator()
+                val control = startupControl
+                if (control != null && startupState != null) {
+                    CheckboxItem("Start at login", checked = startupState.choice != StartupChoice.Off,
+                        enabled = !startupState.busy, onCheckedChange = { on -> scope.launch { control.set(on) } })
+                    startupState.message?.let { Item(it, enabled = false, onClick = {}) }
+                    Separator()
+                }
                 Item(stringResource(Res.string.tray_quit), onClick = ::exitApplication)
             },
         )

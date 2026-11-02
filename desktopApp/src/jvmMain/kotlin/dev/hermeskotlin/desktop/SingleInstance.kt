@@ -44,15 +44,16 @@ class SingleInstance private constructor(@Suppress("unused") private val lock: F
         /**
          * This launch's claim, or null when another Herald runs and has been asked to come forward (and to open
          * [link], when given). A holder that doesn't answer may be on its way out, so this one runs then too, only
-         * without the claim.
+         * without the claim. A background claim leaves an existing instance alone.
          */
-        fun claim(dir: File, link: String? = null): SingleInstance? {
+        fun claim(dir: File, link: String? = null, foreground: Boolean = true): SingleInstance? {
             dir.mkdirs()
             val portFile = File(dir, "instance.port")
             val channel = RandomAccessFile(File(dir, "instance.lock"), "rw").channel
             val lock = runCatching { channel.tryLock() }.getOrNull()
             if (lock == null) {
                 channel.close()
+                if (!foreground) return null
                 val port = portFile.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull()
                 val reached = port != null && runCatching {
                     // One line: a link can't carry a line break into the next message.
