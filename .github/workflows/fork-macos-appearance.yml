@@ -1,0 +1,74 @@
+name: Fork macOS native appearance qualification
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Public fork contribution branch or exact commit
+        default: ed63f4d07752a5ef39b5ba3f469682e2898e8aa5
+        type: string
+      baseline_ref:
+        description: Clean upstream baseline commit
+        default: de2158110d0c952e90d2639929b409354b796924
+        type: string
+  push:
+    branches: [codex/fork-macos-appearance-ci]
+    paths: [.github/fork-tools/macos-appearance/**, .github/workflows/fork-macos-appearance.yml]
+permissions:
+  contents: read
+concurrency:
+  group: fork-macos-appearance-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    if: github.repository == 'StavenCross/kyllene'
+    runs-on: macos-15
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: StavenCross/kyllene
+          ref: ${{ matrix.variant == 'baseline' && (inputs.baseline_ref || 'de2158110d0c952e90d2639929b409354b796924') || (inputs.source_ref || 'ed63f4d07752a5ef39b5ba3f469682e2898e8aa5') }}
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: StavenCross/kyllene
+          ref: ${{ inputs.source_ref || 'ed63f4d07752a5ef39b5ba3f469682e2898e8aa5' }}
+          path: contract
+          sparse-checkout: desktopApp/tests
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          distribution: jetbrains
+          java-version: '25'
+          java-package: jdk+jcef
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6
+      - name: Build unsigned release application and desktop tests
+        working-directory: source
+        env:
+          HERALD_PACKAGING_JDK: ${{ env.JAVA_HOME }}
+        run: ./gradlew --no-daemon :desktopApp:jvmTest :desktopApp:createReleaseDistributable
+      - name: Qualify native appearance
+        env:
+          VARIANT: ${{ matrix.variant }}
+          LAUNCHER_CHECK: contract/desktopApp/tests/check_macos_launcher.py
+        run: python3 tooling/.github/fork-tools/macos-appearance/qualify.py source "$VARIANT" report
+      - name: Qualification reports and synthetic screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-appearance-${{ matrix.variant }}
+          path: |
+            report/qualification.json
+            report/*.jpg
+          if-no-files-found: error
