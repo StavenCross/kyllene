@@ -29,6 +29,7 @@ kotlin {
             compileOnly(libs.jcef)
             // Windows' global hotkey for the quick entry.
             implementation(libs.jna.platform)
+            implementation(libs.dbus.core)
         }
         jvmTest.dependencies {
             implementation(libs.kotlin.test)
