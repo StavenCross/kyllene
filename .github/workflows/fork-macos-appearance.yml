@@ -4,11 +4,11 @@ on:
     inputs:
       source_ref:
         description: Public fork contribution branch or exact commit
-        default: ed63f4d07752a5ef39b5ba3f469682e2898e8aa5
+        default: 3d29c5f46fe7441618cd1eaa56de61c7c9dd35f0
         type: string
       baseline_ref:
         description: Clean upstream baseline commit
-        default: de2158110d0c952e90d2639929b409354b796924
+        default: ff6b01fbe4cc55f65e891cb786b84489ab41d781
         type: string
   push:
     branches: [codex/fork-macos-appearance-ci]
@@ -35,13 +35,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: StavenCross/kyllene
-          ref: ${{ matrix.variant == 'baseline' && (inputs.baseline_ref || 'de2158110d0c952e90d2639929b409354b796924') || (inputs.source_ref || 'ed63f4d07752a5ef39b5ba3f469682e2898e8aa5') }}
+          ref: ${{ matrix.variant == 'baseline' && (inputs.baseline_ref || 'ff6b01fbe4cc55f65e891cb786b84489ab41d781') || (inputs.source_ref || '3d29c5f46fe7441618cd1eaa56de61c7c9dd35f0') }}
           path: source
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: StavenCross/kyllene
-          ref: ${{ inputs.source_ref || 'ed63f4d07752a5ef39b5ba3f469682e2898e8aa5' }}
+          ref: ${{ inputs.source_ref || '3d29c5f46fe7441618cd1eaa56de61c7c9dd35f0' }}
           path: contract
           sparse-checkout: desktopApp/tests
           persist-credentials: false
@@ -57,8 +57,9 @@ jobs:
         working-directory: source
         env:
           HERALD_PACKAGING_JDK: ${{ env.JAVA_HOME }}
-        run: ./gradlew --no-daemon :desktopApp:jvmTest :desktopApp:createReleaseDistributable
+        run: ./gradlew --no-daemon --continue :desktopApp:jvmTest :desktopApp:createReleaseDistributable
       - name: Qualify native appearance
+        if: ${{ !cancelled() }}
         env:
           VARIANT: ${{ matrix.variant }}
           LAUNCHER_CHECK: contract/desktopApp/tests/check_macos_launcher.py
