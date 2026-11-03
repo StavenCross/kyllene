@@ -4,7 +4,7 @@ on:
     inputs:
       source_ref:
         description: Public fork contribution branch or exact commit
-        default: 3d29c5f46fe7441618cd1eaa56de61c7c9dd35f0
+        default: 153cefc05757e154fe5de465457810f823b64911
         type: string
       baseline_ref:
         description: Clean upstream baseline commit
@@ -35,13 +35,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: StavenCross/kyllene
-          ref: ${{ matrix.variant == 'baseline' && (inputs.baseline_ref || 'ff6b01fbe4cc55f65e891cb786b84489ab41d781') || (inputs.source_ref || '3d29c5f46fe7441618cd1eaa56de61c7c9dd35f0') }}
+          ref: ${{ matrix.variant == 'baseline' && (inputs.baseline_ref || 'ff6b01fbe4cc55f65e891cb786b84489ab41d781') || (inputs.source_ref || '153cefc05757e154fe5de465457810f823b64911') }}
           path: source
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: StavenCross/kyllene
-          ref: ${{ inputs.source_ref || '3d29c5f46fe7441618cd1eaa56de61c7c9dd35f0' }}
+          ref: ${{ inputs.source_ref || '153cefc05757e154fe5de465457810f823b64911' }}
           path: contract
           sparse-checkout: desktopApp/tests
           persist-credentials: false
@@ -53,6 +53,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6
+      - name: Fork Mac probe contracts
+        working-directory: tooling
+        run: python3 -m unittest discover -s .github/fork-tools/macos-appearance/tests
       - name: Build unsigned release application and desktop tests
         working-directory: source
         env:
@@ -72,4 +75,7 @@ jobs:
           path: |
             report/qualification.json
             report/*.jpg
+            report/app-*/*.jpg
+            report/app-*/application.json
+            report/app-*/application-report.txt
           if-no-files-found: error

@@ -3,7 +3,7 @@ import java.awt.Frame;
 
 /** Disposable AWT process: the JNI probe queries this JVM's AppKit application. */
 public class AppearanceProbe {
-    private static native String inspect();
+    static native String inspect();
     private static native void showPanel(String folder);
 
     public static void main(String[] args) throws Exception {

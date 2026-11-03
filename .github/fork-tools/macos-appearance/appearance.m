@@ -13,11 +13,28 @@ JNIEXPORT jstring JNICALL Java_AppearanceProbe_inspect(JNIEnv *env, jclass cls) 
             NSApplication *app = [NSApplication sharedApplication];
             NSOpenPanel *open = [NSOpenPanel openPanel];
             NSSavePanel *save = [NSSavePanel savePanel];
+            NSMutableArray *windows = [NSMutableArray array];
+            for (NSWindow *window in app.windows) {
+                if (!window.visible) continue;
+                NSMutableDictionary *details = [@{
+                    @"title": window.title ?: @"",
+                    @"window": palette(window.effectiveAppearance),
+                    @"contentView": palette(window.contentView.effectiveAppearance),
+                    @"firstResponderClass": NSStringFromClass([window.firstResponder class]) ?: @"none"
+                } mutableCopy];
+                if ([window.firstResponder isKindOfClass:[NSView class]]) {
+                    details[@"firstResponderAppearance"] = palette(((NSView *)window.firstResponder).effectiveAppearance);
+                }
+                [windows addObject:details];
+            }
+            NSAlert *alert = [NSAlert new];
             NSDictionary *report = @{
                 @"explicitApplicationAppearance": app.appearance.name ?: @"inherited",
                 @"application": palette(app.effectiveAppearance),
                 @"openPanel": palette(open.effectiveAppearance),
-                @"savePanel": palette(save.effectiveAppearance)
+                @"savePanel": palette(save.effectiveAppearance),
+                @"alert": palette(alert.window.effectiveAppearance),
+                @"windows": windows
             };
             NSData *data = [NSJSONSerialization dataWithJSONObject:report options:0 error:nil];
             result = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];

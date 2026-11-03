@@ -6,6 +6,7 @@ if sys.platform != 'darwin':
     sys.exit('This native appearance qualification requires macOS.')
 
 import json
+from application import observe
 import os
 from pathlib import Path
 import plistlib
@@ -94,9 +95,11 @@ def main(source, variant, output):
         expected_exit = 1 if variant == 'baseline' else 0
         if checked.returncode != expected_exit or (variant == 'baseline' and 'found []' not in checked.stderr):
             raise ValueError(f'Unexpected launcher regression result: {report["launcherCheck"]}')
-        run(str(jdk / 'bin/javac'), '-d', str(output), str(tools / 'AppearanceProbe.java'))
+        run(str(jdk / 'bin/javac'), '-d', str(output), *[str(tools / name) for name in ('AppearanceProbe.java', 'InputSource.java', 'ApplicationProbe.java')])
         library = output / 'libappearance.dylib'
-        run('clang', '-shared', '-fPIC', '-fobjc-arc', '-framework', 'AppKit', '-I' + str(jdk / 'include'), '-I' + str(jdk / 'include/darwin'), str(tools / 'appearance.m'), '-o', str(library))
+        run('clang', '-shared', '-fPIC', '-fobjc-arc', '-framework', 'AppKit', '-framework', 'Carbon', '-framework', 'ApplicationServices', '-I' + str(jdk / 'include'), '-I' + str(jdk / 'include/darwin'), str(tools / 'appearance.m'), str(tools / 'input-source.m'), '-o', str(library))
+        state_tool = output / 'input-state'
+        run('clang', '-fobjc-arc', '-framework', 'AppKit', '-framework', 'Carbon', '-framework', 'ApplicationServices', '-I' + str(jdk / 'include'), '-I' + str(jdk / 'include/darwin'), str(tools / 'input-source.m'), str(tools / 'input-state.m'), '-o', str(state_tool))
         swift = output / 'system-appearance'
         run('swiftc', str(tools / 'system-appearance.swift'), '-o', str(swift))
         old = run('osascript', '-e', 'tell application "System Events" to tell appearance preferences to get dark mode')
@@ -126,12 +129,28 @@ def main(source, variant, output):
             if result['explicitApplicationAppearance'] != explicit:
                 raise ValueError(f'Expected application appearance {explicit}, observed {result}')
             target = desired if variant == 'candidate' else 'NSAppearanceNameAqua'
-            for key in ('application', 'openPanel', 'savePanel'):
+            for key in ('application', 'openPanel', 'savePanel', 'alert'):
                 if result[key] != target:
                     raise ValueError(f'{key}: expected {target}, observed {result[key]}')
             record['screenshot'] = screenshot(command, folder, output / ('dark.jpg' if dark else 'light.jpg'))
+            actual = observe(cfg, output / ('app-dark' if dark else 'app-light'), jdk, library)
+            record['applicationProbe'] = actual
+            observations = actual.get('observations', {})
+            if actual.get('exitCode') != 0 or actual.get('inputRestored') is not True or 'error' in actual or 'error' in observations:
+                raise ValueError(f'Actual Kyllene observer failed: {actual}')
+            native = json.loads(observations['nativeAppearance'])
+            if native['application'] != target or native['explicitApplicationAppearance'] != explicit:
+                raise ValueError(f'Actual Kyllene native appearance differs: {native}')
+            windows = [w for w in native.get('windows', []) if w['title'] == 'Kyllene']
+            if not windows:
+                raise ValueError('Actual Kyllene native window was not observed')
+            if variant == 'candidate':
+                for window in windows:
+                    for key in ('window', 'contentView', 'firstResponderAppearance'):
+                        if window.get(key) != target:
+                            raise ValueError(f'Kyllene {key} appearance differs: {window}')
         report['status'] = 'passed'
-        report['notCovered'] = 'Full Kyllene UI, input-language indicator, physical Mac acceptance, signing and notarization'
+        report['notCovered'] = 'No gateway/chat/provider test, trimmed-runtime acceptance, signing or notarization. Input-language indicator requires visual review of actual-app captures.'
     except Exception as error:
         report['error'] = str(error)
         raise
