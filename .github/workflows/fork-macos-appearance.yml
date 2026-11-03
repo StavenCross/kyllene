@@ -56,11 +56,11 @@ jobs:
       - name: Fork Mac probe contracts
         working-directory: tooling
         run: python3 -m unittest discover -s .github/fork-tools/macos-appearance/tests
-      - name: Build unsigned release application and desktop tests
+      - name: Build unsigned application image and desktop tests
         working-directory: source
         env:
           HERALD_PACKAGING_JDK: ${{ env.JAVA_HOME }}
-        run: ./gradlew --no-daemon --continue :desktopApp:jvmTest :desktopApp:createReleaseDistributable
+        run: ./gradlew --no-daemon --continue :desktopApp:jvmTest :desktopApp:createDistributable
       - name: Qualify native appearance
         if: ${{ !cancelled() }}
         env:

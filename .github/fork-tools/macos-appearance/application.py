@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch actual Kyllene release classes with an isolated profile and an in-process UI observer."""
+"""Launch actual packaged Kyllene classes with an isolated profile and an in-process UI observer."""
 import sys
 
 if sys.platform != 'darwin':
@@ -43,7 +43,7 @@ def observe(cfg, output, jdk, library):
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({'settings.v1': json.dumps({'theme': theme})}))
     command = [str(jdk / 'bin/java'), *options, '-Duser.home=' + str(profile), '-javaagent:' + str(agent) + '=' + str(library) + '|' + str(output), '-cp', classpath, main]
-    result = {'appTheme': theme, 'scope': 'Actual Kyllene release classes, generated launcher options, full packaging SDK, isolated profile; not trimmed-runtime acceptance'}
+    result = {'appTheme': theme, 'scope': 'Actual packaged Kyllene classes, generated launcher options, full packaging SDK, isolated profile; not trimmed-runtime acceptance'}
     tool = output.parent / 'input-state'
     snapshot = output / 'keyboard-original.json'
     def state(action):

@@ -76,10 +76,11 @@ def main(source, variant, output):
         jdk = Path(os.environ['JAVA_HOME'])
         report['java'] = run(str(jdk / 'bin/java'), '--version')
         report['probeRuntime'] = 'Same JBR SDK used for packaging; full SDK, not jlink-trimmed app runtime'
-        configs = list(source.glob('desktopApp/build/compose/binaries/main-release/app/*.app/Contents/app/*.cfg'))
+        configs = list(source.glob('desktopApp/build/compose/binaries/main*/app/*.app/Contents/app/*.cfg'))
         if len(configs) != 1:
             raise ValueError(f'Expected one packaged launcher configuration, found {len(configs)}')
         cfg = configs[0]
+        report['applicationImage'] = str(cfg.relative_to(source))
         appdir = cfg.parent
         app = appdir.parent.parent
         report['bundle'] = plistlib.loads((app / 'Contents/Info.plist').read_bytes()).get('CFBundleIdentifier')

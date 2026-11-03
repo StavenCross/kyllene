@@ -28,14 +28,17 @@ public class ApplicationProbe {
         final boolean[] accepted = {false};
         EventQueue.invokeAndWait(() -> {
             Component focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+            report.put("lastFocus", focus == null ? "none" : focus.getClass().getName());
             if (focus == null) return;
             Window window = javax.swing.SwingUtilities.getWindowAncestor(focus);
+            report.put("lastWindow", window == null ? "none" : window.getClass().getName() + ":" + window.isActive() + ":" + window.isFocused());
             if (!(window instanceof Frame frame) || !frame.getTitle().equals("Kyllene") ||
                 !window.getClass().getName().contains("ComposeWindow") || !window.isActive() || !window.isFocused()) return;
             String name = focus.getClass().getName();
             if (!name.startsWith("androidx.compose.") && !name.startsWith("org.jetbrains.skiko.")) return;
             if (target != null && target != focus) return;
             InputMethodRequests input = focus.getInputMethodRequests();
+            report.put("inputRequests", input == null ? "none" : input.getClass().getName());
             if (input == null) return;
             try {
                 Rectangle caret = input.getTextLocation(TextHitInfo.leading(0));
@@ -46,7 +49,7 @@ public class ApplicationProbe {
                 report.put("committedCharacters", String.valueOf(input.getCommittedTextLength()));
                 target = focus;
                 accepted[0] = true;
-            } catch (RuntimeException transientLayout) { /* The first layout may not have its caret yet. */ }
+            } catch (RuntimeException transientLayout) { report.put("lastLayoutError", transientLayout.toString()); }
         });
         return accepted[0] && InputSource.command("selected").contains("\"active\":true");
     }
@@ -63,8 +66,15 @@ public class ApplicationProbe {
             Files.createDirectories(output);
             long deadline = System.nanoTime() + 40_000_000_000L;
             while (!ready(true) && System.nanoTime() < deadline) Thread.sleep(200);
-            if (!ready(false)) throw new IllegalStateException("No active Kyllene Compose text input within 40 seconds");
+            boolean focused = ready(false);
             report.put("nativeAppearance", AppearanceProbe.inspect());
+            if (!focused) {
+                report.put("indicator", "unverified: no active Kyllene Compose text input within 40 seconds; no input posted");
+                String state = InputSource.command("selected");
+                report.put("preflight", state);
+                if (state.contains("\"screenCapture\":true")) capture("application");
+                return;
+            }
             String pair = InputSource.command("pair");
             report.put("inputPair", pair);
             if (!pair.contains("\"errors\":[]")) throw new IllegalStateException(pair);
