@@ -288,7 +288,8 @@ real Bazzite acceptance remains a separate release gate.
 The Linux application menu's **Call Hermes** action opens the existing voice-chat
 route. It calls the destination selected in **Default Call Target** for the
 current gateway, using the shared target lookup, cancellation and connection cue.
-It brings an existing instance forward instead of starting a second application.
+It routes the request to the existing instance instead of starting a second
+application.
 An unavailable target reports the existing call error rather than choosing another
 destination. If signed out, the request waits for sign-in through the usual flow.
 The action starts a call and may use the microphone and configured voice provider.
