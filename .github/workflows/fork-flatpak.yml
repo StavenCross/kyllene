@@ -44,7 +44,7 @@ jobs:
           git -C source fetch origin "refs/heads/$SOURCE_REF"
           source_sha=$(git -C source rev-parse FETCH_HEAD)
           git -C source checkout --detach "$source_sha"
-          if [ -f source/packaging/flatpak/io.github.Giton22.Kyllene.Devel.json ]; then
+          if [ -d source/packaging/flatpak ]; then
             packaging_sha=$source_sha
           else
             git -C source fetch origin refs/heads/codex/flatpak-pr01-packaging
@@ -53,7 +53,8 @@ jobs:
           mkdir package
           git -C source archive "$source_sha" | tar -x -C package
           git -C source archive "$packaging_sha" packaging/flatpak | tar -x -C package
-          python3 tooling/.github/fork-tools/qualification.py select package/packaging/flatpak/io.github.Giton22.Kyllene.Devel.json --sha "$source_sha" --ref "refs/heads/$SOURCE_REF" --runtime "$RUNTIME" --permission-profile "$PERMISSION_PROFILE"
+          manifest=$(python3 tooling/.github/fork-tools/qualification.py manifest package)
+          python3 tooling/.github/fork-tools/qualification.py select "$manifest" --sha "$source_sha" --ref "refs/heads/$SOURCE_REF" --runtime "$RUNTIME" --permission-profile "$PERMISSION_PROFILE"
           echo "Source: $source_sha; packaging: $packaging_sha" >> "$GITHUB_STEP_SUMMARY"
           echo "Permission profile: $PERMISSION_PROFILE" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6

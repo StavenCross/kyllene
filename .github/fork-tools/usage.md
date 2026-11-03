@@ -86,3 +86,9 @@ This workflow intentionally lives only in the fork's reserved namespace; use its
 manual branch input before submitting a feature upstream. It executes candidate
 build code only in an ephemeral read-only job, without repository secrets or saved
 checkout credentials. Fork PR isolation remains a separate trusted-data-only job.
+
+Current-source qualification prefers `app.kyllene.Kyllene.Devel` packaging and
+retains explicit `io.github.Giton22.Kyllene.Devel` compatibility. A source that
+already contains packaging never falls back to an obsolete packaging branch.
+The hosted install/upgrade probe reads the exported, allowlisted application
+identity; unknown identities fail closed. Permission profiles are unchanged.

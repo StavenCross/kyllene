@@ -6,7 +6,7 @@ set -euo pipefail
 }
 build=$(realpath "$1")
 repo=$(realpath "$2")
-app=io.github.Giton22.Kyllene.Devel
+app=$(python3 "$(dirname "$0")/qualification.py" app-id "$build/metadata")
 if flatpak info --user "$app" >/dev/null 2>&1; then
   echo 'Refusing to replace an existing installation.' >&2; exit 1
 fi

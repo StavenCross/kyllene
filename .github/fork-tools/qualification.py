@@ -18,6 +18,28 @@ SECRET = re.compile(rb'(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,
 MAX_ENTRY = 128 * 1024 * 1024
 
 
+APP_IDS = ('app.kyllene.Kyllene.Devel', 'io.github.Giton22.Kyllene.Devel')
+
+
+def manifest_path(root):
+    for identity in APP_IDS:
+        path = root / 'packaging/flatpak' / (identity + '.json')
+        if path.is_file():
+            if json.loads(path.read_text()).get('app-id') != identity:
+                raise ValueError('Manifest identity does not match its reviewed filename')
+            return path
+    raise ValueError('No reviewed Kyllene manifest in selected source')
+
+
+def installed_app_id(metadata):
+    config = configparser.ConfigParser(interpolation=None)
+    config.read_string(metadata)
+    identity = config.get('Application', 'name')
+    if identity not in APP_IDS:
+        raise ValueError('Unreviewed installed application identity')
+    return identity
+
+
 def allowed_permissions(profile):
     if profile not in PROFILES:
         raise ValueError('Unknown permission profile: ' + repr(profile))
@@ -121,11 +143,17 @@ if __name__ == '__main__':
     p = sub.add_parser('scan')
     p.add_argument('build', type=Path)
     p.add_argument('--permission-profile', choices=PROFILES, default='baseline')
+    sub.add_parser('manifest').add_argument('root', type=Path)
+    sub.add_parser('app-id').add_argument('metadata', type=Path)
     args = parser.parse_args()
     if args.mode == 'select':
         output = select(json.loads(args.manifest.read_text()), args.sha, args.ref, args.runtime, args.permission_profile)
         args.manifest.with_name('fork-ci.json').write_text(json.dumps(output, indent=2) + '\n')
         print('Selected source', args.sha, 'runtime', output['runtime-version'], 'permission profile', args.permission_profile)
+    elif args.mode == 'manifest':
+        print(manifest_path(args.root))
+    elif args.mode == 'app-id':
+        print(installed_app_id(args.metadata.read_text()))
     else:
         metadata_permissions((args.build / 'metadata').read_text(), args.permission_profile)
         scan(args.build / 'files')
