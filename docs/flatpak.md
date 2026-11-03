@@ -282,3 +282,18 @@ runtime available. Screenshots and profiles are not uploaded. Xvfb smoke does
 not qualify KDE focus, context menus, portals other than the Secret portal
 through gnome-keyring, voice or live-provider behavior;
 real Bazzite acceptance remains a separate release gate.
+
+## Call launcher action
+
+The Linux application menu's **Call Hermes** action opens the existing voice-chat
+route. It calls the destination selected in **Default Call Target** for the
+current gateway, using the shared target lookup, cancellation and connection cue.
+It brings an existing instance forward instead of starting a second application.
+An unavailable target reports the existing call error rather than choosing another
+destination. If signed out, the request waits for sign-in through the usual flow.
+The action starts a call and may use the microphone and configured voice provider.
+
+The equivalent explicit invocation is `flatpak run
+app.kyllene.Kyllene.Devel herald://voice-chat`. Native launcher activation
+and live-provider behavior require installed Linux validation; packaging tests
+and shared routing tests alone do not establish that acceptance.
