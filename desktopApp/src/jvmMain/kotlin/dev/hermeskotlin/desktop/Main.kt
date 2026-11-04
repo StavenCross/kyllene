@@ -276,9 +276,15 @@ fun main(args: Array<String>) {
             // Windows' own notification where it can be had (it has buttons and stays in the Action Center);
             // otherwise the tray's.
             if (linuxNotices != null) linuxPost(notice, { host.session.value === notice.origin?.session }) { source, current ->
+                // Activate during this user action, before revealing its chat dismisses another page.
+                val mapped = frame?.takeIf { windowShown && it.isShowing && it.extendedState and Frame.ICONIFIED == 0 }
                 show()
-                launcherRaiseGuard = current
-                launcherRaise++
+                if (mapped != null) {
+                    if (current()) LinuxWindowActivation.request(mapped)
+                } else {
+                    launcherRaiseGuard = current
+                    launcherRaise++
+                }
                 shortcuts.fire(Shortcut.RevealChat(source, current))
             }
             else if (!WindowsToasts.show(notice, approveOnce, deny)) tray.sendNotification(Notification(notice.title, notice.body, Notification.Type.None))
