@@ -12,16 +12,18 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopPushNoticeTest {
-    @Test fun pushFallbacksUseTheAppLanguageAndEnglishCatalogueFallback() = runTest {
+    @Test fun pushFallbacksUseTheAppLanguage() = runTest {
         val locale = Locale.getDefault()
         try {
-            Locale.setDefault(Locale.forLanguageTag("es"))
             val ping = PushMessage("p", 100, PushMessage.PING)
+            Locale.setDefault(Locale.ENGLISH)
+            assertEquals("Push notifications are working.", desktopPushNotice("g", ping, { _, _ -> }, { true })!!.notice.body)
+            Locale.setDefault(Locale.forLanguageTag("es"))
             assertEquals("Las notificaciones push funcionan.", desktopPushNotice("g", ping, { _, _ -> }, { true })!!.notice.body)
             val cron = PushMessage("c", 100, PushMessage.CRON_RUN, job = "job1", run = "2026-11-01_12-00-00", status = "failed", notify = true)
             assertEquals("La ejecución ha fallado.", desktopPushNotice("g", cron, { _, _ -> }, { true })!!.notice.body)
             Locale.setDefault(Locale.FRENCH)
-            assertEquals("Push notifications are working.", desktopPushNotice("g", ping, { _, _ -> }, { true })!!.notice.body)
+            assertEquals("Les notifications push fonctionnent.", desktopPushNotice("g", ping, { _, _ -> }, { true })!!.notice.body)
         } finally { Locale.setDefault(locale) }
     }
 
