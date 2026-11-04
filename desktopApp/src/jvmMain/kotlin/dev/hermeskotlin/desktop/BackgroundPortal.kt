@@ -1,5 +1,7 @@
 package dev.hermeskotlin.desktop
 
+import dev.hermeskotlin.desktop.resources.*
+import org.jetbrains.compose.resources.getString
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -45,49 +47,52 @@ internal class BackgroundPortal(private val address: String? = null, private val
         }
     } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { false }
 
-    suspend fun request(enabled: Boolean): StartupGrant? = runInterruptible(Dispatchers.IO) {
-        check(supported()) { "Background startup requires Linux Flatpak." }
-        connection { bus ->
-            val owner = owner(bus)
-            val token = "kyllene" + UUID.randomUUID().toString().replace("-", "")
-            val expected = "$PATH/request/${bus.uniqueName.substring(1).replace('.', '_')}/$token"
-            var path = expected
-            var dispatched = false
-            var terminal = false
-            val result = CompletableFuture<BackgroundRequest.Response>()
-            val subscription = bus.addSigHandler(BackgroundRequest.Response::class.java, owner) {
-                if (it.path == expected) result.complete(it)
-            }
-            try {
-                val portal = bus.getRemoteObject(owner, PATH, BackgroundWire::class.java)
-                val options = mapOf(
-                    "handle_token" to Variant(token),
-                    "reason" to Variant(if (enabled) "Start Kyllene in the tray when you sign in." else "Stop starting Kyllene automatically when you sign in."),
-                    "autostart" to Variant(enabled),
-                    "commandline" to Variant(listOf("kyllene", "--background"), "as"),
-                    "dbus-activatable" to Variant(false),
-                )
-                dispatched = true
-                path = bus.call<DBusPath>(portal, "RequestBackground", "", options).path
-                check(path == expected) { "Unexpected background request handle." }
-                val response = result.get(responseTimeoutMillis, TimeUnit.MILLISECONDS)
-                terminal = true
-                if (response.response.toLong() != 0L) null else {
-                    val background = response.results["background"]?.value
-                    val autostart = response.results["autostart"]?.value
-                    check(background is Boolean && autostart is Boolean) { "Incomplete background response." }
-                    StartupGrant(background, autostart)
+    suspend fun request(enabled: Boolean): StartupGrant? {
+        val reason = getString(if (enabled) Res.string.startup_enable_reason else Res.string.startup_disable_reason)
+        return runInterruptible(Dispatchers.IO) {
+            check(supported()) { "Background startup requires Linux Flatpak." }
+            connection { bus ->
+                val owner = owner(bus)
+                val token = "kyllene" + UUID.randomUUID().toString().replace("-", "")
+                val expected = "$PATH/request/${bus.uniqueName.substring(1).replace('.', '_')}/$token"
+                var path = expected
+                var dispatched = false
+                var terminal = false
+                val result = CompletableFuture<BackgroundRequest.Response>()
+                val subscription = bus.addSigHandler(BackgroundRequest.Response::class.java, owner) {
+                    if (it.path == expected) result.complete(it)
                 }
-            } finally {
-                val interrupted = Thread.interrupted()
                 try {
-                    if (dispatched && !terminal) runCatching {
-                        val request = bus.getRemoteObject(owner, path, BackgroundRequest::class.java)
-                        bus.call<Void>(request, "Close", timeout = 500)
+                    val portal = bus.getRemoteObject(owner, PATH, BackgroundWire::class.java)
+                    val options = mapOf(
+                        "handle_token" to Variant(token),
+                        "reason" to Variant(reason),
+                        "autostart" to Variant(enabled),
+                        "commandline" to Variant(listOf("kyllene", "--background"), "as"),
+                        "dbus-activatable" to Variant(false),
+                    )
+                    dispatched = true
+                    path = bus.call<DBusPath>(portal, "RequestBackground", "", options).path
+                    check(path == expected) { "Unexpected background request handle." }
+                    val response = result.get(responseTimeoutMillis, TimeUnit.MILLISECONDS)
+                    terminal = true
+                    if (response.response.toLong() != 0L) null else {
+                        val background = response.results["background"]?.value
+                        val autostart = response.results["autostart"]?.value
+                        check(background is Boolean && autostart is Boolean) { "Incomplete background response." }
+                        StartupGrant(background, autostart)
                     }
                 } finally {
-                    subscription.close()
-                    if (interrupted) Thread.currentThread().interrupt()
+                    val interrupted = Thread.interrupted()
+                    try {
+                        if (dispatched && !terminal) runCatching {
+                            val request = bus.getRemoteObject(owner, path, BackgroundRequest::class.java)
+                            bus.call<Void>(request, "Close", timeout = 500)
+                        }
+                    } finally {
+                        subscription.close()
+                        if (interrupted) Thread.currentThread().interrupt()
+                    }
                 }
             }
         }

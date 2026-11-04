@@ -2,6 +2,9 @@ package dev.hermeskotlin.desktop
 
 import dev.hermeskotlin.core.storage.InMemoryKeyValueStore
 import dev.hermeskotlin.core.storage.KeyValueStore
+import dev.hermeskotlin.desktop.resources.*
+import org.jetbrains.compose.resources.getString
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -24,7 +27,7 @@ class BackgroundStartupTest {
         assertEquals(StartupChoice.Background, BackgroundStartup.load(store) { null }.state.value.choice)
         startup.set(false)
         assertEquals(StartupChoice.Background, startup.state.value.choice)
-        assertTrue(startup.state.value.message != null)
+        assertEquals(StartupMessage.NotApplied, startup.state.value.message)
     }
 
     @Test fun `partial consent starts visibly and disable follows the portal result`() = runTest {
@@ -34,6 +37,7 @@ class BackgroundStartupTest {
         startup.set(true)
         assertEquals(StartupChoice.Window, startup.state.value.choice)
         assertFalse(startup.state.value.choice.hidden)
+        assertEquals(StartupMessage.ShowsWindow, startup.state.value.message)
         result = StartupGrant(true, false)
         startup.set(false)
         assertEquals(StartupChoice.Off, startup.state.value.choice)
@@ -48,10 +52,11 @@ class BackgroundStartupTest {
         }
         startup.set(true)
         assertEquals(StartupChoice.Off, startup.state.value.choice)
+        assertEquals(StartupMessage.NotApproved, startup.state.value.message)
         fail = true
         startup.set(true)
         assertEquals(StartupChoice.Off, startup.state.value.choice)
-        assertFalse(startup.state.value.message.orEmpty().contains("private"))
+        assertEquals(StartupMessage.Incomplete, startup.state.value.message)
         assertFalse(startup.state.value.busy)
     }
 
@@ -83,7 +88,16 @@ class BackgroundStartupTest {
         startup.set(true)
         assertEquals(1, calls)
         assertEquals(StartupChoice.Background, startup.state.value.choice)
-        assertTrue(startup.state.value.message != null)
+        assertEquals(StartupMessage.NotSaved, startup.state.value.message)
+    }
+
+    @Test fun `startup guidance follows the system language`() = withLocale("es") {
+        runBlocking {
+            assertEquals("Iniciar al iniciar sesión", getString(Res.string.startup_at_login))
+            val startup = BackgroundStartup.load(InMemoryKeyValueStore()) { StartupGrant(false, true) }
+            startup.set(true)
+            assertEquals("El inicio automático mostrará una ventana.", getString(startup.state.value.message!!.text))
+        }
     }
 
     @Test fun `background second launch never sends a show request`() {

@@ -1,6 +1,8 @@
 package dev.hermeskotlin.desktop
 
 import dev.hermeskotlin.core.storage.KeyValueStore
+import dev.hermeskotlin.desktop.resources.*
+import org.jetbrains.compose.resources.StringResource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,7 +12,14 @@ import kotlinx.coroutines.withContext
 
 internal data class StartupGrant(val background: Boolean, val autostart: Boolean)
 internal enum class StartupChoice(val hidden: Boolean = false) { Off, Window, Background(true) }
-internal data class StartupState(val choice: StartupChoice, val busy: Boolean = false, val message: String? = null)
+internal enum class StartupMessage(val text: StringResource) {
+    NotApproved(Res.string.startup_not_approved),
+    NotApplied(Res.string.startup_not_applied),
+    ShowsWindow(Res.string.startup_shows_window),
+    NotSaved(Res.string.startup_not_saved),
+    Incomplete(Res.string.startup_incomplete),
+}
+internal data class StartupState(val choice: StartupChoice, val busy: Boolean = false, val message: StartupMessage? = null)
 
 /** The desktop owns autostart; this stores only its last confirmed answer, never a pending wish. */
 internal class BackgroundStartup private constructor(
@@ -28,7 +37,7 @@ internal class BackgroundStartup private constructor(
         try {
             val result = request(enabled)
             if (result == null) {
-                mutable.value = mutable.value.copy(message = "Startup request not approved.")
+                mutable.value = mutable.value.copy(message = StartupMessage.NotApproved)
                 return
             }
             val choice = when {
@@ -37,8 +46,8 @@ internal class BackgroundStartup private constructor(
                 else -> StartupChoice.Window
             }
             mutable.value = StartupState(choice, busy = true, message = when {
-                enabled != result.autostart -> "Desktop did not apply the startup change."
-                choice == StartupChoice.Window -> "Startup will show a window."
+                enabled != result.autostart -> StartupMessage.NotApplied
+                choice == StartupChoice.Window -> StartupMessage.ShowsWindow
                 else -> null
             })
             try {
@@ -46,12 +55,12 @@ internal class BackgroundStartup private constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                mutable.value = mutable.value.copy(message = "Desktop updated startup; app preference was not saved.")
+                mutable.value = mutable.value.copy(message = StartupMessage.NotSaved)
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            mutable.value = mutable.value.copy(message = "Startup request did not complete.")
+            mutable.value = mutable.value.copy(message = StartupMessage.Incomplete)
         } finally {
             mutable.value = mutable.value.copy(busy = false)
             pending.unlock()

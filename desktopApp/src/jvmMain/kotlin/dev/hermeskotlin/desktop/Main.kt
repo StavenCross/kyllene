@@ -416,9 +416,9 @@ fun main(args: Array<String>) {
                 Separator()
                 val control = startupControl
                 if (control != null && startupState != null) {
-                    CheckboxItem("Start at login", checked = startupState.choice != StartupChoice.Off,
+                    CheckboxItem(stringResource(Res.string.startup_at_login), checked = startupState.choice != StartupChoice.Off,
                         enabled = !startupState.busy, onCheckedChange = { on -> scope.launch { control.set(on) } })
-                    startupState.message?.let { Item(it, enabled = false, onClick = {}) }
+                    startupState.message?.let { Item(stringResource(it.text), enabled = false, onClick = {}) }
                     Separator()
                 }
                 Item(stringResource(Res.string.tray_quit), onClick = ::exitApplication)

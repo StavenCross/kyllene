@@ -30,7 +30,7 @@ class BackgroundPortalTest {
         assertTrue(service.options.isEmpty())
     }
 
-    @Test fun `early response needs the actual owner and path and explicit startup command`() = fixture { service, portal ->
+    @Test fun `early response needs the actual owner and path and explicit startup command`() = withLocale("en") { fixture { service, portal ->
         assertEquals(StartupGrant(true, true), portal.request(true))
         assertEquals(true, service.options["autostart"]?.value)
         assertEquals(listOf("kyllene", "--background"), service.options["commandline"]?.value)
@@ -38,7 +38,7 @@ class BackgroundPortalTest {
         assertEquals(StartupGrant(true, true), portal.request(false))
         assertEquals(false, service.options["autostart"]?.value)
         assertEquals("Stop starting Kyllene automatically when you sign in.", service.options["reason"]?.value)
-    }
+    } }
 
     @Test fun `decline returns no grant and missing result fields never imply disable`() = fixture { service, portal ->
         service.code = 1
@@ -67,6 +67,15 @@ class BackgroundPortalTest {
         service.pending = true
         assertFails { portal.request(true) }
         service.closed.get(3, TimeUnit.SECONDS)
+    }
+
+    @Test fun `permission reasons follow the system language`() = withLocale("es") {
+        fixture { service, portal ->
+            portal.request(true)
+            assertEquals("Iniciar Kyllene en la bandeja al iniciar sesión.", service.options["reason"]?.value)
+            portal.request(false)
+            assertEquals("Dejar de iniciar Kyllene automáticamente al iniciar sesión.", service.options["reason"]?.value)
+        }
     }
 
     private fun fixture(test: suspend kotlinx.coroutines.CoroutineScope.(Fixture, BackgroundPortal) -> Unit) {
