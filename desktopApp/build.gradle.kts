@@ -32,6 +32,8 @@ kotlin {
             implementation(libs.dbus.core)
             // The tray's, quick entry's and system prompts' words (src/jvmMain/composeResources).
             implementation(compose.components.resources)
+            // FileKit uses the same D-Bus runtime; the Linux shortcut portal uses no file descriptors.
+            implementation(libs.dbus.core)
         }
         jvmTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
