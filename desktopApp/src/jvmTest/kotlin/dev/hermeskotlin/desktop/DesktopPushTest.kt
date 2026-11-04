@@ -75,15 +75,20 @@ class DesktopPushTest {
         val inbox = Inbox()
         val requests = mutableListOf<PushSubscription>()
         val statuses = mutableListOf<String?>()
+        val interrupted = CompletableDeferred<Unit>()
         val listener = DesktopPush(watches, inbox, { request -> flow {
             requests += request
             if (requests.size == 1) throw IOException("private https://broker.example/secret-topic")
             awaitCancellation()
-        } }, { _, _, _ -> }, statuses::add, StandardTestDispatcher(testScheduler))
+        } }, { _, _, _ -> }, {
+            statuses += it
+            if (it != null) interrupted.complete(Unit)
+        }, StandardTestDispatcher(testScheduler))
         val job = listener.start(backgroundScope)
         try {
             runCurrent()
             assertEquals(1, requests.size)
+            interrupted.await()
             assertTrue(statuses.any { it != null })
             assertTrue(statuses.filterNotNull().none { "private" in it || "secret-topic" in it })
             inbox.snapshot = subscription.copy(sinceSeconds = 777)
