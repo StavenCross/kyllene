@@ -2,6 +2,7 @@ package dev.hermeskotlin.desktop
 
 import dev.hermeskotlin.core.inbox.InboxRun
 import dev.hermeskotlin.core.push.PushMessage
+import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
@@ -11,6 +12,27 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopPushNoticeTest {
+    @Test fun pushFallbacksUseTheAppLanguageAndEnglishCatalogueFallback() = runTest {
+        val locale = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("es"))
+            val ping = PushMessage("p", 100, PushMessage.PING)
+            assertEquals("Las notificaciones push funcionan.", desktopPushNotice("g", ping, { _, _ -> }, { true })!!.notice.body)
+            val cron = PushMessage("c", 100, PushMessage.CRON_RUN, job = "job1", run = "2026-11-01_12-00-00", status = "failed", notify = true)
+            assertEquals("La ejecución ha fallado.", desktopPushNotice("g", cron, { _, _ -> }, { true })!!.notice.body)
+            Locale.setDefault(Locale.FRENCH)
+            assertEquals("Push notifications are working.", desktopPushNotice("g", ping, { _, _ -> }, { true })!!.notice.body)
+        } finally { Locale.setDefault(locale) }
+    }
+
+    @Test fun aLocaleReadCannotReturnANoticeToAnOwnerRevokedAfterItsFirstCheck() = runTest {
+        var current = true
+        val shown = desktopPushNotice("g", PushMessage("p", 100, PushMessage.PING), { _, _ -> }, {
+            current.also { current = false }
+        })
+        assertNull(shown)
+    }
+
     private val bot = PushMessage("m", 100, PushMessage.BOT_MESSAGE, bot = "worker", label = " Worker\u0000 ",
         session = "session:1", text = "\r\n```report```\r\n" + "w".repeat(700))
 

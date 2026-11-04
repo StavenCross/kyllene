@@ -785,9 +785,7 @@ internal fun SettingsView(
                     PluginInstallDialog(
                         visible = installAsked,
                         feature = stringResource(Res.string.settings_notifications_anywhere),
-                        what = if (isDesktop) "It watches your bots' chats and sends each new reply to " +
-                            "this computer while Kyllene is running, end-to-end encrypted through ntfy.sh."
-                        else stringResource(Res.string.plugin_notifications_what),
+                        what = stringResource(if (isDesktop) Res.string.plugin_notifications_what_desktop else Res.string.plugin_notifications_what),
                         onDismiss = { installAsked = false },
                     ) {
                         installAsked = false
@@ -1041,11 +1039,7 @@ private fun suggestionsDetail(on: Boolean, plugin: SuggestionsPlugin): String =
 /** What Notifications anywhere does, or where its setup on the gateway stands. */
 @Composable
 private fun pushDetail(on: Boolean, push: PushStatus): String {
-    if (!on) return if (isDesktop) {
-        "Hear from your bots even off your gateway's network, end-to-end encrypted through ntfy.sh. " +
-            "Installs the herald-push plugin on the gateway. " +
-            "Receives while Kyllene is running."
-    } else stringResource(Res.string.settings_notifications_anywhere_detail)
+    if (!on) return stringResource(if (isDesktop) Res.string.settings_notifications_anywhere_desktop_detail else Res.string.settings_notifications_anywhere_detail)
     return when (push.state) {
         PushStatus.State.On -> push.detail ?: stringResource(Res.string.settings_push_on)
         PushStatus.State.Working -> push.detail ?: stringResource(Res.string.settings_push_working)

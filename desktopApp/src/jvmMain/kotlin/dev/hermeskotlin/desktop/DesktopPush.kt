@@ -6,6 +6,8 @@ import dev.hermeskotlin.core.push.PushInboxException
 import dev.hermeskotlin.core.push.PushMessage
 import dev.hermeskotlin.core.push.PushSubscription
 import dev.hermeskotlin.core.storage.SecureStorageException
+import dev.hermeskotlin.desktop.resources.*
+import org.jetbrains.compose.resources.getString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,15 +62,20 @@ internal class DesktopPush(
                                 }
                             }
                         }
-                        if (watches.value == watch) status(RECONNECTING)
+                        val detail = getString(Res.string.push_reconnecting)
+                        currentCoroutineContext().ensureActive()
+                        if (watches.value == watch) status(detail)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         // HTTP exceptions may contain a secret topic URL: only our own safe guidance is shown.
-                        if (watches.value == watch) status(when (e) {
-                            is PushInboxException, is SecureStorageException -> e.message
-                            else -> RECONNECTING
-                        })
+                        val detail = when (e) {
+                            is PushInboxException -> getString(Res.string.push_replay_unavailable)
+                            is SecureStorageException -> getString(storageReasonText(e.reason))
+                            else -> getString(Res.string.push_reconnecting)
+                        }
+                        currentCoroutineContext().ensureActive()
+                        if (watches.value == watch) status(detail)
                     }
                     failures = if (System.nanoTime() - started >= HEALTHY_NANOS) 0 else failures + 1
                     delay(BACKOFF_MS[(failures - 1).coerceIn(BACKOFF_MS.indices)])
@@ -80,7 +87,6 @@ internal class DesktopPush(
     }.also { job = it }
 
     private companion object {
-        const val RECONNECTING = "Push connection interrupted. Retrying while Kyllene is running."
         const val HEALTHY_NANOS = 60_000_000_000L
         val BACKOFF_MS = longArrayOf(2_000, 5_000, 10_000, 30_000, 60_000)
     }
