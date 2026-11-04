@@ -226,6 +226,7 @@ class AppViewModelTest {
         val vm = viewModel()
         vm.route.first { it is Route.Chat }
         vm.newChat(ComposeDraft(text = "Keep this unsent"))
+        runCurrent()
         val target = assertIs<Route.Chat>(vm.route.value).target
         val source = chatHost.open(home.gatewayUrl, null, "Live source")
         vm.addGateway()

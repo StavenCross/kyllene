@@ -18,10 +18,10 @@ internal interface NotificationPortal : DBusInterface {
     class Icon(@field:Position(0) val kind: String, @field:Position(1) val value: Variant<*>) : Struct()
 }
 
-internal fun notificationPayload(notice: PortalNotice): Map<String, Variant<*>> = mapOf(
+internal fun notificationPayload(notice: PortalNotice, appId: String = System.getenv("FLATPAK_ID") ?: "app.kyllene.Kyllene"): Map<String, Variant<*>> = mapOf(
     "title" to Variant(notice.title),
     "body" to Variant(notice.body),
-    "icon" to Variant(NotificationPortal.Icon("themed", Variant(listOf("io.github.Giton22.Kyllene.Devel", "dialog-information"), "as"))),
+    "icon" to Variant(NotificationPortal.Icon("themed", Variant(listOf(appId, "dialog-information"), "as"))),
     "default-action" to Variant(notice.defaultAction),
     "buttons" to Variant(notice.buttons.map { (label, action) -> mapOf("label" to Variant(label), "action" to Variant(action)) }, "aa{sv}"),
 )

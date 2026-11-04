@@ -34,6 +34,14 @@ class NotificationPortalTest {
     }
 
     @Test
+    fun themedIconUsesTheInstalledApplicationIdentity() {
+        val appId = "app.kyllene.Kyllene.NotificationFixture"
+        val payload = notificationPayload(PortalNotice("Title", "Body", "open", emptyList()), appId)
+        val icon = payload.getValue("icon").value as NotificationPortal.Icon
+        assertEquals(listOf(appId, "dialog-information"), icon.value.value)
+    }
+
+    @Test
     fun onlyEmptyOrVersionTwoPlatformDataCanAccompanyOurTargetlessActions() {
         assertTrue(notificationParameters(emptyList()))
         assertTrue(notificationParameters(listOf(Variant(mapOf("activation-token" to Variant("token")), "a{sv}"))))

@@ -23,7 +23,8 @@ class LinuxNotificationsTest {
     private var opened = 0
     private val answers = mutableListOf<ApprovalChoice>()
     private val owner = LinuxNoticeOwner("https://example.invalid", "work", { valid }, { opened++ }, { answers += it })
-    private val notifications = LinuxNotifications(delivery) { prefs }
+    private var labels = "Approve" to "Deny"
+    private val notifications = LinuxNotifications(delivery, actionLabels = { labels }) { prefs }
     private val reply = DesktopNotice("Release", "```\r\nplain <b>text</b>", "s1", "Release")
 
     @Test
@@ -77,6 +78,36 @@ class LinuxNotificationsTest {
         assertEquals(listOf(ApprovalChoice.Once), answers)
         assertEquals(0, opened)
         assertTrue(delivery.shown.isEmpty())
+    }
+
+    @Test
+    fun denyingAnApprovalDoesNotOpenItsSource() {
+        val request = InputRequest.Approval("deny", "example", "Run command", null, listOf(ApprovalChoice.Once, ApprovalChoice.Deny))
+        notifications.post(reply.copy(request = request), owner)
+        val (id, notice) = delivery.shown.entries.single()
+        notifications.action(id, notice.buttons.last().second)
+        notifications.action(id, notice.buttons.last().second)
+        assertEquals(listOf(ApprovalChoice.Deny), answers)
+        assertEquals(0, opened)
+        assertTrue(delivery.shown.isEmpty())
+    }
+
+    @Test
+    fun deliveryAndOwnerExpiryDoNotOpenTheSource() {
+        notifications.post(reply, owner)
+        assertEquals(0, opened)
+        valid = false
+        notifications.reconcile()
+        assertEquals(0, opened)
+        assertTrue(delivery.shown.isEmpty())
+    }
+
+    @Test
+    fun approvalButtonsUseTheCurrentApplicationLanguage() {
+        val approval = InputRequest.Approval("q1", "echo hello", "Run command", null, listOf(ApprovalChoice.Once, ApprovalChoice.Deny))
+        labels = "Einmal freigeben" to "Ablehnen"
+        notifications.post(reply.copy(request = approval), owner)
+        assertEquals(listOf(labels.first, labels.second), delivery.shown.values.single().buttons.map { it.first })
     }
 
     @Test
@@ -146,7 +177,7 @@ class LinuxNotificationsTest {
     @Test
     fun delayedFailureCannotWithdrawAReplacementWithTheSameId() {
         var fallback = 0
-        val notices = LinuxNotifications(delivery, fallback = { _, _ -> fallback++ }) { prefs }
+        val notices = LinuxNotifications(delivery, actionLabels = { labels }, fallback = { _, _ -> fallback++ }) { prefs }
         notices.post(reply, owner)
         val id = delivery.shown.keys.single()
         val first = delivery.shown.getValue(id)
@@ -163,7 +194,7 @@ class LinuxNotificationsTest {
     @Test
     fun failedDeliveryFallsBackOnlyWhileItsExactSourceIsStillCurrent() {
         var fallback = 0
-        val notices = LinuxNotifications(delivery, fallback = { _, captured -> if (captured.current()) fallback++ }) { prefs }
+        val notices = LinuxNotifications(delivery, actionLabels = { labels }, fallback = { _, captured -> if (captured.current()) fallback++ }) { prefs }
         notices.post(reply, owner)
         val (firstId, first) = delivery.shown.entries.single()
         notices.failed(firstId, first.defaultAction)

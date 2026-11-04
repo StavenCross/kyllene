@@ -32,6 +32,7 @@ internal data class LinuxNoticeOwner(
 /** The open chat's Linux notices. All methods run on the same UI dispatcher as chat ownership changes. */
 internal class LinuxNotifications(
     private val delivery: NotificationDelivery,
+    private val actionLabels: () -> Pair<String, String>,
     private val fallback: (DesktopNotice, LinuxNoticeOwner) -> Unit = { _, _ -> },
     private val settings: () -> AppSettings,
 ) : AutoCloseable {
@@ -47,7 +48,8 @@ internal class LinuxNotifications(
         val open = "open-$nonce"
         val actions = linkedMapOf<String, ApprovalChoice?>(open to null)
         val approval = notice.request as? InputRequest.Approval
-        val buttons = listOf(ApprovalChoice.Once to "Approve", ApprovalChoice.Deny to "Deny")
+        val (approveOnce, deny) = actionLabels()
+        val buttons = listOf(ApprovalChoice.Once to approveOnce, ApprovalChoice.Deny to deny)
             .filter { (choice, _) -> approval?.choices?.contains(choice) == true }
             .map { (choice, label) ->
                 val action = "${choice.wire}-$nonce"
