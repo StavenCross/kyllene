@@ -229,12 +229,21 @@ fun main(args: Array<String>) {
                     scope.launch {
                         val trusted = withContext(Dispatchers.IO) { runCatching { inbox.current(sub) }.getOrDefault(false) }
                         if (trusted && current()) {
-                            show()
                             shortcuts.fire(Shortcut.RevealNotice(source, ::current) {
-                                if (current()) when (val destination = projected.destination) {
-                                    is PushDestination.Bot -> links.openOwnedBot(destination.name, destination.label, destination.session, ::current)
-                                    is PushDestination.Inbox -> koin.get<InboxLinks>().open(destination.key, ::current)
-                                    null -> Unit
+                                if (current()) {
+                                    val mapped = frame?.takeIf { windowShown && it.isShowing && it.extendedState and Frame.ICONIFIED == 0 }
+                                    show()
+                                    if (mapped != null) {
+                                        if (current()) LinuxWindowActivation.request(mapped)
+                                    } else {
+                                        launcherRaiseGuard = ::current
+                                        launcherRaise++
+                                    }
+                                    when (val destination = projected.destination) {
+                                        is PushDestination.Bot -> links.openOwnedBot(destination.name, destination.label, destination.session, ::current)
+                                        is PushDestination.Inbox -> koin.get<InboxLinks>().open(destination.key, ::current)
+                                        null -> Unit
+                                    }
                                 }
                             })
                         }
