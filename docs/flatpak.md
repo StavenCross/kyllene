@@ -370,6 +370,23 @@ not qualify KDE focus, context menus, portals other than the Secret portal
 through gnome-keyring, voice or live-provider behavior;
 real Bazzite acceptance remains a separate release gate.
 
+### Launcher actions
+
+The desktop entry offers **New chat**, **Quick entry** and **Call Hermes** (see
+[Call launcher action](#call-launcher-action)). Each can start the app; a later
+launch forwards its action to the existing instance. Quick entry opens the
+existing small composer and waits for the user to send a prompt.
+
+The entry handles the app's existing `herald://` links, including stored chats and
+bots. It does not claim `hermes://`, which belongs to Hermes Desktop. Launchers
+can use `herald://new-chat` and the desktop-only `herald://quick-entry` action.
+The latter is an exact action URI, without parameters or an extra path. On Linux,
+when the app is asked to come forward (a later launch, a link, the tray or a
+notification), it asks the window manager to activate its X11/Xwayland window;
+the manager may decline. This does not qualify a
+native Wayland backend. Global shortcut binding is a separate integration, and
+these entries don't set up automatic startup.
+
 ### Quick entry shortcut
 
 With **Settings → Desktop → Quick entry** enabled, Linux asks the desktop's
@@ -389,3 +406,16 @@ prompt. It needs the app running; launcher actions and login startup are separat
 Window focus follows the existing runtime/compositor rules. The pinned public
 JBR API cannot consume the portal's activation token, so native Wayland activation
 is not guaranteed. In-app shortcuts remain available without this portal.
+
+## Call launcher action
+
+The Linux application menu's **Call Hermes** action opens the existing voice-chat
+route. It calls the destination selected in **Default Call Target** for the
+current gateway, using the shared target lookup and cancellation. While the app
+runs, the launch hands the request to its window instead of opening a second one.
+An unavailable target reports the existing call error rather than choosing another
+destination. If signed out, the request waits for sign-in through the usual flow.
+The action starts a call and may use the microphone and configured voice provider.
+
+The equivalent explicit invocation is `flatpak run
+app.kyllene.Kyllene.Devel herald://voice-chat`.
