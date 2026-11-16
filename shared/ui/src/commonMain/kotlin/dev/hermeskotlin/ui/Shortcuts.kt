@@ -1,6 +1,7 @@
 package dev.hermeskotlin.ui
 
 import androidx.compose.runtime.Composable
+import dev.hermeskotlin.core.chat.ChatSession
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
@@ -31,6 +32,10 @@ sealed interface Shortcut {
     data object NewChat : Shortcut
     data object CommandPalette : Shortcut
     data object Settings : Shortcut
+    /** An external action reveals the currently owned chat rather than a page opened over it. */
+    data class RevealChat(val source: ChatSession, val current: () -> Boolean) : Shortcut
+    /** An owned notification waits for dialogs and sign-in before opening its destination. */
+    data class RevealNotice(val source: ChatSession?, val current: () -> Boolean, val open: () -> Unit) : Shortcut
     data object ToggleSidebar : Shortcut
     data object SearchChats : Shortcut
     data object NextChat : Shortcut

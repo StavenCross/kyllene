@@ -71,6 +71,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
@@ -294,6 +295,7 @@ fun SettingsScreen(
             viewModel.runConnectionCheck()
         },
         push = push,
+        pushAvailable = viewModel.pushAvailable,
         pushTest = pushTest,
         onPushAnywhere = viewModel::setPushAnywhere,
         onPushTest = viewModel::sendPushTest,
@@ -404,6 +406,7 @@ internal fun SettingsView(
     gatewayName: String = gatewayUrl.substringAfter("://").trimEnd('/'),
     onCheckConnection: () -> Unit = {},
     push: PushStatus = PushStatus(),
+    pushAvailable: Boolean = !isDesktop,
     pushTest: Boolean? = null,
     onPushAnywhere: (Boolean) -> Unit = {},
     onPushTest: () -> Unit = {},
@@ -800,7 +803,7 @@ internal fun SettingsView(
                     PluginInstallDialog(
                         visible = installAsked,
                         feature = stringResource(Res.string.settings_notifications_anywhere),
-                        what = stringResource(Res.string.plugin_notifications_what),
+                        what = stringResource(if (isDesktop) Res.string.plugin_notifications_what_desktop else Res.string.plugin_notifications_what),
                         onDismiss = { installAsked = false },
                     ) {
                         installAsked = false
@@ -862,9 +865,8 @@ internal fun SettingsView(
                             icon = Lucide.Vibrate,
                         )
                     }
-                    // The phone's push through ntfy; the desktop has no way to receive it yet.
-                    if (!isDesktop) Divider()
-                    if (!isDesktop) SwitchRow(
+                    if (pushAvailable) Divider()
+                    if (pushAvailable) SwitchRow(
                         title = stringResource(Res.string.settings_notifications_anywhere),
                         detail = pushDetail(settings.pushAnywhere, push),
                         checked = settings.pushAnywhere,
@@ -873,11 +875,11 @@ internal fun SettingsView(
                         icon = Lucide.Globe,
                     )
                     val pushUpdate = push.update
-                    if (settings.pushAnywhere && pushUpdate != null) {
+                    if (pushAvailable && settings.pushAnywhere && pushUpdate != null) {
                         Divider()
                         PluginUpdateRow(pushUpdate, onPushUpdate)
                     }
-                    if (settings.pushAnywhere && push.state == PushStatus.State.On) {
+                    if (pushAvailable && settings.pushAnywhere && push.state == PushStatus.State.On) {
                         Divider()
                         ActionRow(
                             when (pushTest) {
@@ -1062,7 +1064,7 @@ private fun suggestionsDetail(on: Boolean, plugin: SuggestionsPlugin): String =
 /** What Notifications anywhere does, or where its setup on the gateway stands. */
 @Composable
 private fun pushDetail(on: Boolean, push: PushStatus): String {
-    if (!on) return stringResource(Res.string.settings_notifications_anywhere_detail)
+    if (!on) return stringResource(if (isDesktop) Res.string.settings_notifications_anywhere_desktop_detail else Res.string.settings_notifications_anywhere_detail)
     return when (push.state) {
         PushStatus.State.On -> push.detail ?: stringResource(Res.string.settings_push_on)
         PushStatus.State.Working -> push.detail ?: stringResource(Res.string.settings_push_working)
@@ -1331,20 +1333,21 @@ private fun Field(title: String, detail: String? = null, control: @Composable ()
 
 /** A setting that's on or off: the whole row toggles. An [icon] sits on a small tile before the title. */
 @Composable
-internal fun SwitchRow(title: String, detail: String?, checked: Boolean, onCheckedChange: (Boolean) -> Unit, icon: ImageVector? = null) {
+internal fun SwitchRow(title: String, detail: String?, checked: Boolean, onCheckedChange: (Boolean) -> Unit, icon: ImageVector? = null, enabled: Boolean = true, titleColor: Color? = null) {
     if (!settingShown(title, detail)) return
     Row(
         Modifier
             .fillMaxWidth()
             .handCursor()
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .alpha(if (enabled) 1f else 0.45f)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
             .padding(horizontal = 14.dp, vertical = 13.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) IconTile(icon)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, style = Theme[typography][body], color = Theme[colors][text])
+            Text(title, style = Theme[typography][body], color = titleColor ?: Theme[colors][text])
             if (detail != null) Text(detail, style = Theme[typography][bodySmall], color = Theme[colors][textTertiary])
         }
         Switch(checked)

@@ -81,8 +81,7 @@ internal fun ToolRow(tool: ToolActivity, messageKey: String? = null) {
         CommentSource(it, "the $part of your ${tool.name} tool call$what", code = true)
     }
     val hasDetails = tool.input != null || tool.output != null || tool.diff != null || tool.risk != null
-    // Saved: what was opened stays open when the activity is made again, as on unfolding a foldable.
-    var expanded by rememberSaveable(tool.id) { mutableStateOf(false) }
+    var expanded by rememberSaveable(messageKey, tool.id) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             Modifier
