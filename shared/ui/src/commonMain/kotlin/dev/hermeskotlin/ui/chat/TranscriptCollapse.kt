@@ -1,15 +1,11 @@
 package dev.hermeskotlin.ui.chat
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -33,21 +29,13 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import com.composeunstyled.Text
-import com.composeunstyled.UnstyledButton
-import com.composeunstyled.theme.Theme
-import dev.hermeskotlin.designsystem.bodySmall
-import dev.hermeskotlin.designsystem.colors
-import dev.hermeskotlin.designsystem.stroke
-import dev.hermeskotlin.designsystem.surfaceElevated
-import dev.hermeskotlin.designsystem.textSecondary
-import dev.hermeskotlin.designsystem.typography
+import dev.hermeskotlin.designsystem.components.Button
+import dev.hermeskotlin.designsystem.components.ButtonSize
+import dev.hermeskotlin.designsystem.components.ButtonVariant
 import dev.hermeskotlin.designsystem.components.MinTouchTarget
-import dev.hermeskotlin.designsystem.components.handCursor
 
 internal val LocalTranscriptCollapse = staticCompositionLocalOf<TranscriptCollapseState?> { null }
 
@@ -89,17 +77,14 @@ internal fun TranscriptCollapseHost(
         }) {
             content()
             state.active?.let { target ->
-                UnstyledButton(
+                Button(
+                    target.label,
                     onClick = target.close,
+                    variant = ButtonVariant.Secondary,
+                    size = ButtonSize.Small,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = bottomInset + 8.dp)
-                        .fillMaxWidth().heightIn(min = MinTouchTarget).handCursor(),
-                ) {
-                    val shape = RoundedCornerShape(4.dp)
-                    Text(target.label, style = Theme[typography][bodySmall], color = Theme[colors][textSecondary],
-                        textAlign = TextAlign.Center, maxLines = 1,
-                        modifier = Modifier.fillMaxWidth().background(Theme[colors][surfaceElevated], shape)
-                            .border(1.dp, Theme[colors][stroke], shape).padding(vertical = 4.dp))
-                }
+                        .heightIn(min = MinTouchTarget),
+                )
             }
         }
     }
