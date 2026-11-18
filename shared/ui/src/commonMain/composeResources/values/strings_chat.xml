@@ -629,4 +629,8 @@
     <string name="chat_cmd_profile_already">Already in %1$s.</string>
     <string name="chat_cmd_help_failed">Couldn’t load the command list. Type / to try again.</string>
     <string name="chat_cmd_help_group">Commands</string>
+    <string name="chat_react_acknowledge">Got it</string>
+    <string name="chat_react_continue">Continue</string>
+    <string name="chat_react_verify">Verify</string>
+    <string name="chat_react_explain">Explain</string>
 </resources>
