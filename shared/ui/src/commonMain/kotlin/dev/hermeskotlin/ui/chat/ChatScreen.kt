@@ -2856,6 +2856,9 @@ internal fun AssistantReply(
         ReplyHeader(message.timestamp.takeUnless { message.streaming })
         // What's happening now is said once, above the composer; the reply keeps only what it's made of.
         if (showReasoning) Reasoning(message.reasoning, message.streaming, message.key)
+        message.commentary.forEach { update ->
+            MarkdownText(remember(update) { linkFileUris(update) })
+        }
         // While the turn runs its finished steps are listed as they land; once it ends they fold into the pill.
         if (showTools) if (message.streaming) LiveSteps(listedTools, message.key) else Tools(listedTools, message.key)
         if (generated.isNotEmpty()) ReplyMediaList(remember(generated) { generated.map { it.asMedia() } })
@@ -3032,12 +3035,11 @@ private fun UnreadDivider(modifier: Modifier = Modifier) {
 }
 
 /**
- * With reasoning hidden, a finished reply of nothing but reasoning (a step that only thought, or only commented
- * on its way) would be a bare header: it isn't listed.
+ * With reasoning hidden, a finished reply of nothing but reasoning (a step that only thought) would be a bare header: it isn't listed.
  */
 internal fun List<ChatMessage>.withoutBlankReplies(showReasoning: Boolean): List<ChatMessage> =
     if (showReasoning) this else filterNot {
-        it is ChatMessage.Assistant && !it.streaming && it.text.isBlank() && it.tools.isEmpty() && it.error == null &&
+        it is ChatMessage.Assistant && !it.streaming && it.text.isBlank() && it.commentary.isEmpty() && it.tools.isEmpty() && it.error == null &&
             it.warning == null && it.outcome != TurnOutcome.Error && it.outcome != TurnOutcome.Interrupted
     }
 
