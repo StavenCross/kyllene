@@ -125,6 +125,7 @@ sealed interface ChatMessage {
          * (live events carry no time). Null while it streams.
          */
         val timestamp: Double? = null,
+        val commentary: List<String> = emptyList(),
     ) : ChatMessage
 
     /**
