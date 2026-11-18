@@ -631,4 +631,8 @@
     <string name="chat_cmd_help_group">Commands</string>
     <string name="chat_close_reasoning">Close reasoning</string>
     <string name="chat_close_system_messages">Close system messages</string>
+    <string name="chat_react_acknowledge">Got it</string>
+    <string name="chat_react_continue">Continue</string>
+    <string name="chat_react_verify">Verify</string>
+    <string name="chat_react_explain">Explain</string>
 </resources>

@@ -1,5 +1,6 @@
 package dev.hermeskotlin.ui.chat
 
+import dev.hermeskotlin.core.chat.ReplyReaction
 import dev.hermeskotlin.ui.imeVisible
 import dev.hermeskotlin.ui.enterSends
 import dev.hermeskotlin.ui.Shortcut
@@ -2131,6 +2132,7 @@ private fun Messages(
                                     reading = message.key == reading,
                                     onReadAloud = if (canReadAloud) ({ text -> actions.readAloud(message.key, text) }) else null,
                                     onStopReading = actions::stopReading,
+                                    onReact = ({ reaction: ReplyReaction -> actions.reactToReply(message.key, reaction) }).takeIf { connected },
                                 )
                             }
                             // An answer to another bot's message folds under it; never while it's still being written.
@@ -2811,6 +2813,7 @@ internal fun AssistantReply(
     /** Reads the reply's text, as shown, aloud; null when it can't be now. */
     onReadAloud: ((String) -> Unit)? = null,
     onStopReading: () -> Unit = {},
+    onReact: ((ReplyReaction) -> Unit)? = null,
 ) {
     val settings = LocalAppSettings.current
     val showReasoning = settings.showReasoning && message.reasoning.isNotBlank()
@@ -2901,6 +2904,13 @@ internal fun AssistantReply(
                 UnstyledIcon(Lucide.TriangleAlert, contentDescription = null, tint = Theme[colors][warning], modifier = Modifier.padding(top = 2.dp).size(14.dp))
                 CopyableOnDesktop { Text(warningText, style = Theme[typography][bodySmall], color = Theme[colors][warning]) }
             }
+        }
+        if (!message.streaming && (message.userReaction != null || (onReact != null && message.reactionRowId != null))) {
+            ReplyReactionMenu(
+                reaction = message.userReaction,
+                onReact = onReact.takeIf { message.reactionRowId != null },
+                modifier = Modifier.align(Alignment.End),
+            )
         }
         val usage = message.usage?.takeIf { settings.showUsage && !message.streaming }
         val actionable = !message.streaming && text.isNotBlank()

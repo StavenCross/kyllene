@@ -108,6 +108,37 @@ class ChatSessionTest {
     }
 
     @Test
+    fun thumbsUpWritesTheStoredReplyWithoutSubmittingAPrompt() = runTest {
+        val (chat, transport) = resumedChat(backgroundScope, mapOf(
+            "message.react" to """{"row_id":2,"reactions":[{"author":"user","emoji":"👍"}]}""",
+        ))
+
+        chat.react("row-2", ReplyReaction.Acknowledge) { true }
+
+        val call = transport.awaitSent { it.isCall("message.react") }
+        assertEquals("rt1", call.param("session_id"))
+        assertEquals("2", call.param("row_id"))
+        assertEquals("👍", call.param("emoji"))
+        assertEquals("👍", assertIs<ChatMessage.Assistant>(chat.state.value.messages.last()).userReaction)
+        assertTrue(transport.sent.value.none { it.isCall("prompt.submit") })
+    }
+
+    @Test
+    fun verifySubmitsAVisiblePromptAboutTheReactedReply() = runTest {
+        val (chat, transport) = resumedChat(backgroundScope, mapOf(
+            "message.react" to """{"row_id":2,"reactions":[{"author":"user","emoji":"🔍"}]}""",
+            "prompt.submit" to """{"status":"started"}""",
+        ))
+
+        chat.react("row-2", ReplyReaction.Verify) { true }
+
+        val call = transport.awaitSent { it.isCall("prompt.submit") }
+        assertTrue(call.param("text").orEmpty().contains("Verify the claims"))
+        assertTrue(call.param("text").orEmpty().contains("message #2"))
+        assertTrue(call.param("text").orEmpty().contains("Hi! What next?"))
+    }
+
+    @Test
     fun resumesStoredSessionAndStreamsItsTurn() = runTest {
         val (connection, transport) = setup(backgroundScope, mapOf("session.resume" to """{"session_id":"rt1","running":false,"info":{"model":"m1"}}"""))
         val chat = ChatSession(url, "stored-1", "Greeting", connection, SessionsApi(client()), backgroundScope)
