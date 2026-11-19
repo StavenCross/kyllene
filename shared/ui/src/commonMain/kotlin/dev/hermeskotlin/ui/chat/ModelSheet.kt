@@ -174,7 +174,7 @@ internal fun ModelSheet(
     initialQuery: String = "",
     initialScope: PickerScope? = null,
     /** On the desktop, the button it opens from, in window coordinates: it opens over it as a popover. */
-    desktopQuickPicker: Boolean = false,
+    quickPicker: Boolean = false,
     anchor: () -> Rect? = { null },
 ) {
     // Taken once per opening: the pill moving under an open popover (the composer folding) doesn't drag it along.
@@ -207,7 +207,7 @@ internal fun ModelSheet(
         }
     }
 
-    val quick = isDesktop && desktopQuickPicker && !modelOnly
+    val quick = quickPicker && !modelOnly
     var choosingModel by remember { mutableStateOf(false) }
     LaunchedEffect(visible) { if (visible) choosingModel = false }
     if (quick) {
@@ -218,7 +218,7 @@ internal fun ModelSheet(
             popoverPage = choosingModel,
         ) {
             if (choosingModel) {
-                DesktopModelList(
+                QuickModelList(
                     picker, selection, query, note, onBack = { choosingModel = false }, onRefresh = onRefresh,
                     onPick = { picked = it; onSelectModel(it) }, onSettings = onSettings,
                 )
@@ -226,7 +226,7 @@ internal fun ModelSheet(
                 val providerLabel = selection.provider?.let { name ->
                     displayProviderName(name, picker.catalog?.providers?.firstOrNull { it.slug == name }?.name)
                 }
-                DesktopEffortPanel(state, selection, providerLabel, onSelectEffort, onFast, onOpenModels = { choosingModel = true })
+                QuickEffortPanel(state, selection, providerLabel, onSelectEffort, onFast, onOpenModels = { choosingModel = true })
             }
         }
         return

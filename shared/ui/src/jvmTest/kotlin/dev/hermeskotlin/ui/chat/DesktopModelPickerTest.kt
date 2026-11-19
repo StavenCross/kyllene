@@ -52,7 +52,7 @@ class DesktopModelPickerTest {
                             visible = true, onDismiss = {}, state = ChatState(reasoningEffort = effort.value.wire),
                             picker = ModelPickerState(catalog), onRefresh = {}, onSelectModel = { picked += it },
                             onSelectEffort = { effort.value = it }, onFast = {}, onSettings = { settings.value = it(settings.value) },
-                            desktopQuickPicker = true, anchor = { Rect(48f, 500f, 190f, 534f) },
+                            quickPicker = true, anchor = { Rect(48f, 500f, 190f, 534f) },
                         )
                     }
                 }

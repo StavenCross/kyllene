@@ -98,12 +98,13 @@ import dev.hermeskotlin.designsystem.textTertiary
 import dev.hermeskotlin.designsystem.typography
 import dev.hermeskotlin.ui.LocalAppSettings
 import dev.hermeskotlin.ui.arrowFocus
+import dev.hermeskotlin.ui.isDesktop
 import dev.hermeskotlin.ui.resources.*
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 
 @Composable
-internal fun DesktopEffortPanel(
+internal fun QuickEffortPanel(
     state: ChatState, selection: ModelSelection, providerLabel: String?, onSelect: (ReasoningEffort) -> Unit,
     onFast: (Boolean) -> Unit, onOpenModels: () -> Unit,
 ) {
@@ -156,7 +157,7 @@ private fun EffortSlider(choices: List<ReasoningEffort>, selected: ReasoningEffo
         },
         valueRange = 0f..choices.lastIndex.toFloat(),
         steps = choices.size - 2,
-        modifier = Modifier.fillMaxWidth().height(34.dp).handCursor().semantics {
+        modifier = Modifier.fillMaxWidth().height(if (isDesktop) 34.dp else 48.dp).handCursor().semantics {
             contentDescription = label
             stateDescription = choice
         },
@@ -233,7 +234,7 @@ private fun EffortSlider(choices: List<ReasoningEffort>, selected: ReasoningEffo
 }
 
 @Composable
-internal fun ColumnScope.DesktopModelList(
+internal fun ColumnScope.QuickModelList(
     picker: ModelPickerState, selection: ModelSelection, query: TextFieldState, note: String?,
     onBack: () -> Unit, onRefresh: () -> Unit, onPick: (ModelOption) -> Unit,
     onSettings: ((AppSettings) -> AppSettings) -> Unit,
@@ -280,7 +281,7 @@ internal fun ColumnScope.DesktopModelList(
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val list = rememberLazyListState()
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    if (isDesktop) LaunchedEffect(Unit) { focus.requestFocus() }
     LaunchedEffect(needle) { list.scrollToItem(0) }
     TextField(
         state = query, placeholder = stringResource(Res.string.chat_model_search), leadingIcon = Lucide.Search,
@@ -301,7 +302,7 @@ internal fun ColumnScope.DesktopModelList(
             onClick = { onPick(option) }, onPickVariant = onPick,
             onToggleStar = { onSettings { it.copy(starredModels = it.starredModels.toggleStar(row, option)) } }, compact = true)
     }
-    ScrollbarBox(list, Modifier.fillMaxWidth().weight(1f, fill = false)) {
+    ScrollbarBox(list, Modifier.fillMaxWidth().then(if (isDesktop) Modifier.weight(1f, fill = false) else Modifier)) {
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 410.dp).arrowFocus(), state = list) {
             if (favoriteRows.isNotEmpty()) {
                 item("favorites") { SectionLabel(stringResource(Res.string.chat_quick_model_favorites)) }
@@ -344,7 +345,7 @@ internal fun ColumnScope.DesktopModelList(
 private fun PickerNavigationRow(text: String, detail: String? = null, expanded: Boolean? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(Theme[radii][radiusMedium])
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 36.dp).clip(shape).background(Theme[colors][surface2])
+        Modifier.fillMaxWidth().heightIn(min = if (isDesktop) 36.dp else 48.dp).clip(shape).background(Theme[colors][surface2])
             .border(1.dp, Theme[colors][strokeStrong], shape).handCursor()
             .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
