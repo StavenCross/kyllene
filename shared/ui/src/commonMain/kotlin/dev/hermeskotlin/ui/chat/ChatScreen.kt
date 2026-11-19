@@ -210,6 +210,7 @@ import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CircleAlert
 import com.composables.icons.lucide.CircleCheck
@@ -1906,6 +1907,7 @@ private fun Messages(
     // growing below the lines being read leaves them where they are; following the bottom is done here instead.
     val listState = rememberLazyListState(messages.lastIndex.coerceAtLeast(0), LIST_END)
     val scope = rememberCoroutineScope()
+    val collapse = remember { TranscriptCollapseState() }
     val newest = messages.lastOrNull()
     val awayFromBottom by remember { derivedStateOf { listState.layoutInfo.hiddenBelow() > 600 } }
     // Following while the reader sits right at the end; where they drag to decides whether it carries on.
@@ -1929,7 +1931,7 @@ private fun Messages(
     // The composer folds by how near the end the list stands; scrolling back up lets go of one opened by a tap.
     DisposableEffect(listState, fold, readUpTo) {
         fold.list = listState
-        fold.onNavigate = { readerNavigated = true }
+        fold.onNavigate = { readerNavigated = true; collapse.navigated() }
         onDispose {
             fold.list = null
             fold.onNavigate = {}
@@ -2023,6 +2025,7 @@ private fun Messages(
     }
     val unservable = remember(messages) { unservableEchoes(messages) }
     val unreadLine = remember(messages, unreadFrom, readUpTo) { unreadLineKey(messages, unreadFrom, readUpTo) }
+    TranscriptCollapseHost(bottomInset = controlsInset, state = collapse) {
     BoxWithConstraints(Modifier.fillMaxSize().pointerInput(readUpTo) {
         awaitPointerEventScope {
             var down: Offset? = null
@@ -2032,11 +2035,12 @@ private fun Messages(
                 // The wheel, or a drag on the list, seen before children consume it. A tap on a link or an icon
                 // doesn't move the list, so it leaves the jump to the unread line alone.
                 when (event.type) {
-                    PointerEventType.Scroll -> readerNavigated = true
+                    PointerEventType.Scroll -> { readerNavigated = true; collapse.navigated() }
                     PointerEventType.Press -> down = change.position
                     PointerEventType.Release -> if (event.changes.none { it.pressed }) down = null
                     PointerEventType.Move -> if (change.pressed && down?.let { (change.position - it).getDistance() > viewConfiguration.touchSlop } == true) {
                         readerNavigated = true
+                        collapse.navigated()
                     }
                 }
             }
@@ -2148,13 +2152,13 @@ private fun Messages(
                 .pointerInput(readUpTo) {
                     awaitPointerEventScope {
                         while (true) {
-                            if (awaitPointerEvent(PointerEventPass.Initial).type == PointerEventType.Press) readerNavigated = true
+                            if (awaitPointerEvent(PointerEventPass.Initial).type == PointerEventType.Press) { readerNavigated = true; collapse.navigated() }
                         }
                     }
                 },
         )
         AnimatedVisibility(
-            visible = awayFromBottom,
+            visible = awayFromBottom && LocalTranscriptCollapse.current?.active == null,
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut(),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp + controlsInset),
@@ -2198,6 +2202,7 @@ private fun Messages(
                 }
             } }
         }
+    }
     }
 }
 
@@ -2850,7 +2855,7 @@ internal fun AssistantReply(
     ) {
         ReplyHeader(message.timestamp.takeUnless { message.streaming })
         // What's happening now is said once, above the composer; the reply keeps only what it's made of.
-        if (showReasoning) Reasoning(message.reasoning, message.streaming)
+        if (showReasoning) Reasoning(message.reasoning, message.streaming, message.key)
         // While the turn runs its finished steps are listed as they land; once it ends they fold into the pill.
         if (showTools) if (message.streaming) LiveSteps(listedTools, message.key) else Tools(listedTools, message.key)
         if (generated.isNotEmpty()) ReplyMediaList(remember(generated) { generated.map { it.asMedia() } })
@@ -3449,19 +3454,21 @@ internal fun Disclosure(
 
 /** The reply's reasoning, folded; live progress is the dock's to show. Opened, it stays open when the activity is made again. */
 @Composable
-internal fun Reasoning(text: String, streaming: Boolean) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    Disclosure(
-        icon = { UnstyledIcon(Lucide.Brain, contentDescription = null, tint = Theme[colors][textTertiary], modifier = Modifier.size(16.dp)) },
-        label = stringResource(Res.string.chat_usage_reasoning),
-        expanded = expanded,
-        onToggle = { expanded = !expanded },
-    ) {
-        val body = @Composable {
-            MarkdownText(text.trim(), streaming = streaming, textStyle = Theme[typography][bodySmall].copy(color = Theme[colors][textSecondary]))
+internal fun Reasoning(text: String, streaming: Boolean, messageKey: String? = null) {
+    var expanded by rememberSaveable(messageKey) { mutableStateOf(false) }
+    TranscriptCollapseSection(expanded, stringResource(Res.string.chat_close_reasoning), onClose = { expanded = false }) {
+        Disclosure(
+            icon = { UnstyledIcon(Lucide.Brain, contentDescription = null, tint = Theme[colors][textTertiary], modifier = Modifier.size(16.dp)) },
+            label = stringResource(Res.string.chat_usage_reasoning),
+            expanded = expanded,
+            onToggle = { expanded = !expanded },
+        ) {
+            val body = @Composable {
+                MarkdownText(text.trim(), streaming = streaming, textStyle = Theme[typography][bodySmall].copy(color = Theme[colors][textSecondary]))
+            }
+            // On the desktop it's text to select and copy like the reply's, with the same right-click menu.
+            if (isDesktop) PlatformCommentableSelection(onAction = null, content = body) else body()
         }
-        // On the desktop it's text to select and copy like the reply's, with the same right-click menu.
-        if (isDesktop) PlatformCommentableSelection(onAction = null, content = body) else body()
     }
 }
 

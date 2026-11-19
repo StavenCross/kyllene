@@ -127,14 +127,16 @@ internal fun TranscriptEventRow(event: TranscriptEvent) {
 @Composable
 private fun SystemMessages(entries: List<TranscriptEvent>) {
     var expanded by remember { mutableStateOf(false) }
-    Disclosure(
-        icon = { UnstyledIcon(Lucide.Settings, contentDescription = null, tint = Theme[colors][textTertiary], modifier = Modifier.size(16.dp)) },
-        label = stringResource(Res.string.chat_event_system_messages, entries.size),
-        expanded = expanded,
-        onToggle = { expanded = !expanded },
-    ) {
-        // Counted from the newest, as the group is keyed: one opened stays open when an earlier page adds entries above.
-        Column { entries.forEachIndexed { i, entry -> key(entries.size - i) { TranscriptEventRow(entry) } } }
+    TranscriptCollapseSection(expanded, stringResource(Res.string.chat_close_system_messages), onClose = { expanded = false }) {
+        Disclosure(
+            icon = { UnstyledIcon(Lucide.Settings, contentDescription = null, tint = Theme[colors][textTertiary], modifier = Modifier.size(16.dp)) },
+            label = stringResource(Res.string.chat_event_system_messages, entries.size),
+            expanded = expanded,
+            onToggle = { expanded = !expanded },
+        ) {
+            // Counted from the newest, as the group is keyed: one opened stays open when an earlier page adds entries above.
+            Column { entries.forEachIndexed { i, entry -> key(entries.size - i) { TranscriptEventRow(entry) } } }
+        }
     }
 }
 

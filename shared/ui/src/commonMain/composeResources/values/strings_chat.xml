@@ -629,4 +629,6 @@
     <string name="chat_cmd_profile_already">Already in %1$s.</string>
     <string name="chat_cmd_help_failed">Couldn’t load the command list. Type / to try again.</string>
     <string name="chat_cmd_help_group">Commands</string>
+    <string name="chat_close_reasoning">Close reasoning</string>
+    <string name="chat_close_system_messages">Close system messages</string>
 </resources>
