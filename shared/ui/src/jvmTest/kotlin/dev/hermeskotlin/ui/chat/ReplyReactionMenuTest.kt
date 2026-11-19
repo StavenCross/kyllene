@@ -11,7 +11,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.GitBranch
+import com.composables.icons.lucide.Lucide
 import com.composeunstyled.theme.ColorScheme
+import dev.hermeskotlin.ui.sessions.RowMenuItem
 import dev.hermeskotlin.core.chat.ReplyReaction
 import dev.hermeskotlin.designsystem.HermesTheme
 import kotlin.test.Test
@@ -37,5 +40,28 @@ class ReplyReactionMenuTest {
         onNodeWithText("👍  Got it").performClick()
         assertEquals(ReplyReaction.Acknowledge, selected.value)
         onNodeWithText("👍").assertIsDisplayed()
+    }
+
+    @Test
+    fun labeledMenuOffersReplyControlsEvenWithoutReactionSupport() = runComposeUiTest {
+        var branched = false
+        setContent {
+            HermesTheme(ColorScheme.Dark) {
+                Box(Modifier.size(360.dp, 640.dp)) {
+                    ReplyReactionMenu(
+                        reaction = "👍",
+                        onReact = null,
+                        actions = listOf(RowMenuItem("Branch here", Lucide.GitBranch) { branched = true }),
+                        showLabel = true,
+                    )
+                }
+            }
+        }
+        onNodeWithText("👍").assertIsDisplayed()
+        onNodeWithText("More").performClick()
+        onNodeWithText("👍  Got it").assertDoesNotExist()
+        onNodeWithText("Branch here").performClick()
+        assertEquals(true, branched)
+        onNodeWithText("Branch here").assertDoesNotExist()
     }
 }
