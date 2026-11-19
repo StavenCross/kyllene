@@ -60,6 +60,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.composeunstyled.DragIndication
 import com.composeunstyled.ModalBottomSheetProperties
@@ -108,10 +109,12 @@ fun BottomSheet(
     onDismiss: () -> Unit,
     onEscape: (() -> Unit)? = null,
     anchor: Rect? = null,
+    popoverWidth: Dp = POPOVER_WIDTH,
+    popoverPage: Any? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     OpenModals.Count(visible)
-    if (LocalDesktopLayout.current) DesktopSheet(visible, onDismiss, onEscape, anchor, content) else PhoneSheet(visible, onDismiss, content)
+    if (LocalDesktopLayout.current) DesktopSheet(visible, onDismiss, onEscape, anchor, popoverWidth, popoverPage, content) else PhoneSheet(visible, onDismiss, content)
 }
 
 /**
@@ -120,7 +123,10 @@ fun BottomSheet(
  * outside or Escape calls [onDismiss].
  */
 @Composable
-private fun DesktopSheet(visible: Boolean, onDismiss: () -> Unit, onEscape: (() -> Unit)?, anchor: Rect?, content: @Composable ColumnScope.() -> Unit) {
+private fun DesktopSheet(
+    visible: Boolean, onDismiss: () -> Unit, onEscape: (() -> Unit)?, anchor: Rect?,
+    popoverWidth: Dp, popoverPage: Any?, content: @Composable ColumnScope.() -> Unit,
+) {
     val dismiss by rememberUpdatedState(onDismiss)
     val escape by rememberUpdatedState(onEscape)
     val focus = remember { FocusRequester() }
@@ -136,7 +142,7 @@ private fun DesktopSheet(visible: Boolean, onDismiss: () -> Unit, onEscape: (() 
         // the pointer doesn't jump. A window resized centres it again.
         val held = remember { IntArray(2) { -1 } }
         // The tallest a popover has been while open.
-        val tallest = remember { IntArray(1) }
+        val tallest = remember(popoverPage) { IntArray(1) }
         // The button as it was when the popover opened: one that moves or goes meanwhile doesn't take it along.
         // Taken again on a reopening that comes while the last one still fades.
         val button = remember(visible) { anchor }
@@ -146,7 +152,7 @@ private fun DesktopSheet(visible: Boolean, onDismiss: () -> Unit, onEscape: (() 
         var origin by remember { mutableStateOf(Offset(inset, inset)) }
         val gap = with(LocalDensity.current) { POPOVER_GAP.roundToPx() }
         val roomy = with(LocalDensity.current) { POPOVER_MIN_ROOM.roundToPx() }
-        val popoverWidth = with(LocalDensity.current) { POPOVER_WIDTH.roundToPx() }
+        val widthPx = with(LocalDensity.current) { popoverWidth.roundToPx() }
         Layout(
             modifier = Modifier
                 .fillMaxSize()
@@ -177,7 +183,7 @@ private fun DesktopSheet(visible: Boolean, onDismiss: () -> Unit, onEscape: (() 
             val below = constraints.maxHeight - bottom - gap
             val over = above >= roomy || above >= below
             val room = (if (over) above else below).coerceIn(0, constraints.maxHeight)
-            val width = minOf(constraints.maxWidth, popoverWidth)
+            val width = minOf(constraints.maxWidth, widthPx)
             val panels = measurables.map {
                 it.measure(constraints.copy(minWidth = width, maxWidth = width, minHeight = tallest[0].coerceIn(0, room), maxHeight = room))
             }
