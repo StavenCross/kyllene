@@ -23,9 +23,19 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -36,9 +46,13 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 import androidx.compose.ui.draw.clip
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
@@ -150,11 +164,14 @@ internal fun TranscriptControlBackdrop(
     Box(modifier, contentAlignment = Alignment.Center) {
         if (haze != null) {
             val page = Theme[colors][background]
-            val style = remember(page) {
+            val density = LocalDensity.current
+            val direction = LocalLayoutDirection.current
+            val style = remember(page, shape, density, direction) {
                 HazeBlurStyle {
                     blurEnabled(true)
                     blurRadius(12.dp)
                     backgroundColor(page)
+                    mask(featheredRimMask(shape, density, direction))
                 }
             }
             Box(Modifier.matchParentSize().clip(shape).hazeBlur(input = HazeInput.Sources(haze), style = style))
@@ -162,6 +179,38 @@ internal fun TranscriptControlBackdrop(
         } else {
             content()
         }
+    }
+}
+
+/** The blur fades smoothly from full at the button edge to transparent at the rim's outside. */
+private fun featheredRimMask(shape: Shape, density: Density, direction: LayoutDirection) = object : ShaderBrush() {
+    override fun createShader(size: Size): Shader {
+        val bitmap = ImageBitmap(ceil(size.width).toInt().coerceAtLeast(1), ceil(size.height).toInt().coerceAtLeast(1))
+        val canvas = Canvas(bitmap)
+        val paint = Paint()
+        val outline = shape.createOutline(size, direction, density)
+        val outer = (outline as? Outline.Rounded)?.roundRect ?: RoundRect(Rect(Offset.Zero, size), CornerRadius.Zero)
+        val feather = with(density) { TranscriptControlRim.toPx() }.coerceAtMost(size.minDimension / 2)
+        val steps = ceil(feather).toInt().coerceAtLeast(1)
+        var previousAlpha = 0f
+        for (step in 1..steps) {
+            val t = step.toFloat() / steps
+            val inset = (step - 0.5f) * feather / steps
+            val alpha = t * t * (3 - 2 * t)
+            // Each inset fill is composited over the previous fill, which already has some alpha.
+            paint.color = Color.White.copy(alpha = ((alpha - previousAlpha) / (1 - previousAlpha)).coerceIn(0f, 1f))
+            fun CornerRadius.inset() = CornerRadius((x - inset).coerceAtLeast(0f), (y - inset).coerceAtLeast(0f))
+            canvas.drawOutline(
+                Outline.Rounded(RoundRect(
+                    outer.left + inset, outer.top + inset, outer.right - inset, outer.bottom - inset,
+                    outer.topLeftCornerRadius.inset(), outer.topRightCornerRadius.inset(),
+                    outer.bottomRightCornerRadius.inset(), outer.bottomLeftCornerRadius.inset(),
+                )),
+                paint,
+            )
+            previousAlpha = alpha
+        }
+        return ImageShader(bitmap)
     }
 }
 
