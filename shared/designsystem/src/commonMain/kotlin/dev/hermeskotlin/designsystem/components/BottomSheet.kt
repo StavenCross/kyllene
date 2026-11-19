@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,6 +98,9 @@ import dev.hermeskotlin.designsystem.textSecondary
 import dev.hermeskotlin.designsystem.caption
 import dev.hermeskotlin.designsystem.textTertiary
 import dev.hermeskotlin.designsystem.typography
+
+/** False while a phone's bottom sheet is moving to its open position. */
+val LocalBottomSheetSettled = staticCompositionLocalOf { true }
 
 /**
  * Modal sheet from the bottom edge, sized to its content. Controlled: show with [visible];
@@ -300,7 +305,11 @@ private fun PhoneSheet(visible: Boolean, onDismiss: () -> Unit, content: @Compos
                             Modifier.size(36.dp, 4.dp).background(Theme[colors][strokeStrong], CircleShape),
                         )
                     }
-                    content()
+                    CompositionLocalProvider(
+                        LocalBottomSheetSettled provides (state.isIdle && state.currentDetent == SheetDetent.FullyExpanded),
+                    ) {
+                        content()
+                    }
                 }
             }
         }
