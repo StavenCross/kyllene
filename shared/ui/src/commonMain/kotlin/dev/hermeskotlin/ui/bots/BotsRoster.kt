@@ -169,7 +169,7 @@ interface BotActions {
 
 /**
  * The Bots side of the sidebar: what needs the user first, as cards, then a card per bot with its face,
- * name and what it's up to, two to a row, then the rooms. Tapping a bot opens its one permanent chat;
+ * name and what it's up to, then the rooms. Tapping a bot opens its one permanent chat;
  * a long press offers the rest.
  */
 @Composable
@@ -209,6 +209,8 @@ fun BotsRoster(
     /** Why a room's rename or delete didn't work. */
     roomsNotice: Words? = null,
     onDismissRoomsNotice: () -> Unit = {},
+    bottomInset: Dp = 96.dp,
+    compactRows: Boolean = !isDesktop,
 ) {
     val heldUp = remember(needsYou) { needsYou.filterIsInstance<NeedsYou.Answer>().associate { it.bot.name to it.waiting } }
     var roomAsk by remember { mutableStateOf<RoomAsk?>(null) }
@@ -242,6 +244,7 @@ fun BotsRoster(
             onStartOver = { startOver = bot },
             onDelete = { deleting = bot },
             modifier = modifier,
+            compact = compactRows,
         )
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -249,6 +252,12 @@ fun BotsRoster(
         val columns = if (fontScale > 1.3f || maxWidth < 300.dp) 1 else 2
         // A grid's rows: the bots in [columns], each row keyed by its first bot.
         fun LazyListScope.grid(bots: List<Bot>, prefix: String, hidden: Boolean) {
+            if (compactRows) {
+                items(bots, key = { "$prefix:${it.name}" }) { bot ->
+                    card(bot, hidden, Modifier.fillMaxWidth().padding(bottom = 3.dp))
+                }
+                return
+            }
             items(bots.chunked(columns), key = { "$prefix:${it.first().name}" }) { row ->
                 Row(
                     Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(bottom = 8.dp),
@@ -265,7 +274,7 @@ fun BotsRoster(
             modifier = Modifier.fillMaxSize(),
             state = list,
             // Room to scroll the last cards out from under the floating footer.
-            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 4.dp, bottom = bottomInset),
         ) {
             if (top != null) item(key = "top") { top() }
             // Row keys carry a ':', which no profile name has, so a bot named like a key can't collide.
@@ -436,6 +445,7 @@ private fun BotCard(
     onStartOver: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     val shape = RoundedCornerShape(Theme[radii][radiusLarge])
     val haptics = LocalHapticFeedback.current
@@ -496,41 +506,34 @@ private fun BotCard(
     ) {
         // A desktop's way to the same actions: a right-click, with the menu at the pointer.
         RowContextMenu(contextMenuOpen, onDismiss = { contextMenuOpen = false }, items = menuItems)
-        Column(
-            Modifier
-                .fillMaxSize()
-                .clip(shape)
-                .background(if (selected) Theme[colors][accentSoft] else Theme[colors][surface])
+        val cardModifier = (if (compact) Modifier.fillMaxWidth().heightIn(min = MinTouchTarget) else Modifier.fillMaxSize())
+            .clip(shape)
+            .background(if (selected) Theme[colors][accentSoft] else if (compact) Color.Transparent else Theme[colors][surface])
                 // Lit as under the pointer while its right-click menu is open, so it's clear which bot that is.
-                .then(if (contextMenuOpen) Modifier.background(Theme[colors][text].copy(alpha = 0.08f)) else Modifier)
-                .border(1.dp, if (selected) Theme[colors][accentText].copy(alpha = 0.5f) else Theme[colors][stroke], shape)
-                .handCursor()
-                .combinedClickable(
-                    onClick = { actions.open(bot) },
-                    onClickLabel = stringResource(Res.string.bots_open_chat_of, bot.label),
-                    onLongClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        menuOpen = true
-                    },
-                    onLongClickLabel = stringResource(Res.string.bots_actions_of, bot.label),
-                    interactionSource = null,
-                    indication = rememberHoverIndication(Theme[colors][text]),
+            .then(if (contextMenuOpen) Modifier.background(Theme[colors][text].copy(alpha = 0.08f)) else Modifier)
+            .then(if (compact) Modifier else Modifier.border(1.dp, if (selected) Theme[colors][accentText].copy(alpha = 0.5f) else Theme[colors][stroke], shape))
+            .handCursor()
+            .combinedClickable(
+                onClick = { actions.open(bot) },
+                onClickLabel = stringResource(Res.string.bots_open_chat_of, bot.label),
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    menuOpen = true
+                },
+                onLongClickLabel = stringResource(Res.string.bots_actions_of, bot.label),
+                interactionSource = null,
+                indication = rememberHoverIndication(Theme[colors][text]),
                 )
-                .then(if (isDesktop) Modifier.onSecondaryPress { contextMenuOpen = true } else Modifier)
-                .semantics { this.selected = selected }
-                .alpha(if (hidden) 0.6f else 1f)
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                BotAvatar(bot, picture, size = 44.dp)
-                Spacer(Modifier.weight(1f))
-                when {
-                    opening -> Spinner(Modifier.size(14.dp))
-                    else -> StatusDot(tone, unread)
-                }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            .then(if (isDesktop) Modifier.onSecondaryPress { contextMenuOpen = true } else Modifier)
+            .semantics { this.selected = selected }
+            .alpha(if (hidden) 0.6f else 1f)
+            .padding(horizontal = if (compact) 8.dp else 14.dp, vertical = if (compact) 7.dp else 14.dp)
+
+        val status: @Composable () -> Unit = {
+            if (opening) Spinner(Modifier.size(14.dp)) else StatusDot(tone, unread)
+        }
+        val details: @Composable (Modifier) -> Unit = { detailsModifier ->
+            Column(detailsModifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (pinned) UnstyledIcon(Lucide.Pin, contentDescription = stringResource(Res.string.bots_pinned), tint = Theme[colors][textTertiary], modifier = Modifier.size(12.dp))
                     Text(
@@ -559,9 +562,25 @@ private fun BotCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                bot.lastActivity()?.let { relativeTime(it) }?.takeIf { it.isNotBlank() }?.let {
+                if (!compact) bot.lastActivity()?.let { relativeTime(it) }?.takeIf { it.isNotBlank() }?.let {
                     Text(it, style = Theme[typography][code].copy(fontSize = 11.sp), color = Theme[colors][textMuted], maxLines = 1)
                 }
+            }
+        }
+        if (compact) {
+            Row(cardModifier, horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                BotAvatar(bot, picture, size = 32.dp)
+                details(Modifier.weight(1f))
+                status()
+            }
+        } else {
+            Column(cardModifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    BotAvatar(bot, picture, size = 44.dp)
+                    Spacer(Modifier.weight(1f))
+                    status()
+                }
+                details(Modifier)
             }
         }
     }
