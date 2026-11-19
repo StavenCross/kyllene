@@ -732,7 +732,7 @@ fun SessionsSidebar(
         }
     }
 
-    val showDrawerNav = !isDesktop && pageKey == null && !searchOpen && state.filter == SessionListFilter.Recent
+    val showDrawerNav = (pageKey == null || pageInMain) && !searchOpen && state.filter == SessionListFilter.Recent
     var drawerFooterHeight by remember { mutableIntStateOf(0) }
     val drawerBottomInset = with(LocalDensity.current) { drawerFooterHeight.toDp().coerceAtLeast(96.dp) }
     if (pageInMain && mainPage != null) {
@@ -777,8 +777,8 @@ fun SessionsSidebar(
                         openAccount()
                     },
                     onSettings = onOpenSettings,
-                    // Without the switch, search is the Bots side's only way to the chats, so it keeps the pill.
-                    onSearch = { searchOpen = true }.takeIf { isDesktop && (mode == SidebarMode.Chats || !modeSwitch) },
+                    onSearch = null,
+                    reserveSearchSpace = false,
                     profiles = roster?.profiles.orEmpty(),
                     activeProfile = roster?.active(profile)?.name,
                     // Profiles made or removed on the host since show up, as the account sheet's do.
@@ -801,10 +801,11 @@ fun SessionsSidebar(
                 }
                 RenameBanner(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
                 UpdateBanner(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
-                if (!isDesktop && (mode == SidebarMode.Chats || !modeSwitch)) {
+                // With the switch hidden, search is also the Bots side's way to the chats.
+                if (mode == SidebarMode.Chats || !modeSwitch) {
                     SearchPill(onClick = { searchOpen = true })
                 }
-                if (!isDesktop && mode == SidebarMode.Chats && !state.loading &&
+                if (mode == SidebarMode.Chats && !state.loading &&
                     state.error == null && state.listed.isNotEmpty()
                 ) {
                     DrawerAttentionDropdown(
@@ -858,8 +859,7 @@ fun SessionsSidebar(
                             },
                             onRetry = bots::refresh,
                             onDismissNotice = bots::dismissNotice,
-                            // Keep desktop page rows reachable when settings lock the sidebar to Bots.
-                            top = { if (isDesktop && !modeSwitch && navLinks.isNotEmpty()) NavGrid(navLinks, 0.dp) },
+                            compactRows = true,
                             bottomInset = if (showDrawerNav) drawerBottomInset else 96.dp,
                             troubles = troubles,
                             failingRoutines = failingRoutines,
@@ -973,16 +973,6 @@ fun SessionsSidebar(
                                     )
                                 }
                             }
-                            if (isDesktop && !state.loading && state.error == null && state.listed.isNotEmpty()) {
-                                item(key = "filters") {
-                                    AttentionFilters(
-                                        selected = attentionFilter,
-                                        running = state.listed.count { statuses[it.id]?.running == true },
-                                        needsAttention = state.listed.count { statuses[it.id]?.needsAttention == true },
-                                        onSelect = viewModel::setAttentionFilter,
-                                    )
-                                }
-                            }
                             state.savedCopyAt?.takeIf { state.project == null }?.let { savedAt ->
                                 item(key = "saved-copy") {
                                     ListNotice(
@@ -1016,12 +1006,7 @@ fun SessionsSidebar(
                                     item(key = "none-waiting") { ListNotice(stringResource(Res.string.sessions_none_waiting)) }
                             }
                         },
-                    ) {
-                        // The pages left on in Settings › Sidebar pages; with none, no room is kept for them. The item
-                        // stays when it's empty: the list holds on to the first row it shows, so pages turned back on
-                        // would otherwise come in above it, out of sight.
-                        item(key = "nav") { if (isDesktop && navLinks.isNotEmpty()) NavGrid(navLinks, 6.dp) }
-                    }
+                    )
                     state.loading -> ListSkeleton()
                     state.error != null -> EmptyState(Lucide.CloudOff, stringResource(Res.string.sessions_load_failed), state.error, error = true) {
                         Button(stringResource(Res.string.sessions_try_again), onClick = viewModel::refresh, variant = ButtonVariant.Secondary, leadingIcon = Lucide.RefreshCw)
@@ -1387,6 +1372,7 @@ internal fun MainHeader(
     onAccount: () -> Unit,
     onSettings: () -> Unit,
     onSearch: (() -> Unit)?,
+    reserveSearchSpace: Boolean = isDesktop,
     /** The gateway's profiles; with more than one, the header names the active one and opens them in a menu. */
     profiles: List<Profile> = emptyList(),
     /** The active profile's name, the launch profile's included. */
@@ -1506,7 +1492,7 @@ internal fun MainHeader(
             )
         }
         // The phone puts search beneath the mode switch. The desktop keeps a fixed header across modes.
-        if (onSearch != null) SearchPill(onSearch) else if (isDesktop) Spacer(Modifier.height(maxOf(MinTouchTarget, SEARCH_PILL_HEIGHT)))
+        if (onSearch != null) SearchPill(onSearch) else if (reserveSearchSpace) Spacer(Modifier.height(maxOf(MinTouchTarget, SEARCH_PILL_HEIGHT)))
     }
 }
 
@@ -1813,7 +1799,10 @@ internal fun DrawerNavigation(mode: SidebarMode, links: List<NavLink>) {
                 Column(Modifier.fillMaxWidth().heightIn(max = limit).verticalScrollWithBar().padding(start = 12.dp)) {
                     links.forEach { link ->
                         NavTile(
-                            NavLink(link.icon, link.label, link.badge, link.selected) { expanded = false; link.onClick() },
+                            NavLink(link.icon, link.label, link.badge, link.selected) {
+                                if (!isDesktop) expanded = false
+                                link.onClick()
+                            },
                             Modifier.fillMaxWidth(),
                             compact = true,
                         )
@@ -1914,11 +1903,11 @@ private fun BottomBar(
         // Opaque under the banner too, so no row shows around it.
         Column(Modifier.fillMaxWidth().background(ground)) {
             if (message != null) MessageBanner(message.text(), onDismiss = onDismissMessage, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+            navigation?.invoke()
             if (isDesktop) {
                 AccountRow(userLabel, connection, onClick = onAccount, modifier = Modifier.onGloballyPositioned { onAccountBounds(it.boundsInWindow()) })
                 return@Column
             }
-            navigation?.invoke()
             Row(
                 Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
