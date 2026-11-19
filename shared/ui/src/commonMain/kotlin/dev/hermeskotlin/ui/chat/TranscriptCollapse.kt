@@ -39,6 +39,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import androidx.compose.ui.draw.clip
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 import com.composeunstyled.theme.Theme
 import dev.hermeskotlin.designsystem.background
 import dev.hermeskotlin.designsystem.colors
@@ -48,6 +53,8 @@ import dev.hermeskotlin.designsystem.components.Button
 import dev.hermeskotlin.designsystem.components.ButtonSize
 import dev.hermeskotlin.designsystem.components.ButtonVariant
 import dev.hermeskotlin.designsystem.components.MinTouchTarget
+
+internal val TranscriptControlRim = 6.dp
 
 internal val LocalTranscriptCollapse = staticCompositionLocalOf<TranscriptCollapseState?> { null }
 
@@ -79,7 +86,9 @@ internal class TranscriptCollapseState : NestedScrollConnection {
 @Composable
 internal fun TranscriptCollapseHost(
     modifier: Modifier = Modifier, bottomInset: Dp = 0.dp,
-    state: TranscriptCollapseState = remember { TranscriptCollapseState() }, content: @Composable () -> Unit,
+    state: TranscriptCollapseState = remember { TranscriptCollapseState() },
+    controlHaze: HazeState? = null,
+    content: @Composable () -> Unit,
 ) {
     val inset = with(LocalDensity.current) { bottomInset.toPx() }
     CompositionLocalProvider(LocalTranscriptCollapse provides state) {
@@ -89,15 +98,19 @@ internal fun TranscriptCollapseHost(
         }) {
             content()
             state.active?.let { target ->
-                Button(
-                    target.label,
-                    onClick = target.close,
-                    variant = ButtonVariant.Secondary,
-                    size = ButtonSize.Small,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = bottomInset + 8.dp)
-                        .heightIn(min = MinTouchTarget)
-                        .transcriptControlRim(CircleShape),
-                )
+                val rim = if (controlHaze == null) 0.dp else TranscriptControlRim
+                TranscriptControlBackdrop(
+                    CircleShape, controlHaze,
+                    Modifier.align(Alignment.BottomCenter).padding(start = 16.dp - rim, end = 16.dp - rim, bottom = bottomInset + 8.dp - rim),
+                ) {
+                    Button(
+                        target.label,
+                        onClick = target.close,
+                        variant = ButtonVariant.Secondary,
+                        size = ButtonSize.Small,
+                        modifier = Modifier.heightIn(min = MinTouchTarget).transcriptControlOutline(CircleShape),
+                    )
+                }
             }
         }
     }
@@ -129,19 +142,37 @@ internal fun TranscriptCollapseSection(expanded: Boolean, label: String, onClose
     }) { content() }
 }
 
-/** A small opaque rim clears transcript text around an Android control without changing its layout. */
+/** Blur a narrow area of the transcript around the control, following its own shape. */
 @Composable
-internal fun Modifier.transcriptControlRim(shape: Shape): Modifier {
+internal fun TranscriptControlBackdrop(
+    shape: Shape, haze: HazeState?, modifier: Modifier = Modifier, content: @Composable () -> Unit,
+) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (haze != null) {
+            val page = Theme[colors][background]
+            val style = remember(page) {
+                HazeBlurStyle {
+                    blurEnabled(true)
+                    blurRadius(12.dp)
+                    backgroundColor(page)
+                }
+            }
+            Box(Modifier.matchParentSize().clip(shape).hazeBlur(input = HazeInput.Sources(haze), style = style))
+            Box(Modifier.padding(TranscriptControlRim)) { content() }
+        } else {
+            content()
+        }
+    }
+}
+
+@Composable
+internal fun Modifier.transcriptControlOutline(shape: Shape): Modifier {
     if (isDesktop) return this
-    val backdrop = Theme[colors][background].copy(alpha = 1f)
     val edge = Theme[colors][textSecondary]
     return drawWithCache {
-        val rim = 3.dp.toPx()
         val border = 1.dp.toPx()
-        val outer = shape.createOutline(Size(size.width + rim * 2, size.height + rim * 2), layoutDirection, this)
         val inner = shape.createOutline(Size(size.width - border, size.height - border), layoutDirection, this)
         onDrawWithContent {
-            translate(-rim, -rim) { drawOutline(outer, backdrop) }
             drawContent()
             translate(border / 2, border / 2) { drawOutline(inner, edge, style = Stroke(border)) }
         }

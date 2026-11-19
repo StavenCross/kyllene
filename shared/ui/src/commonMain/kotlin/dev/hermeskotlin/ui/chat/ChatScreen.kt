@@ -2031,7 +2031,8 @@ private fun Messages(
     }
     val unservable = remember(messages) { unservableEchoes(messages) }
     val unreadLine = remember(messages, unreadFrom, readUpTo) { unreadLineKey(messages, unreadFrom, readUpTo) }
-    TranscriptCollapseHost(bottomInset = controlsInset, state = collapse) {
+    val controlHaze = if (isDesktop) null else rememberHazeState()
+    TranscriptCollapseHost(bottomInset = controlsInset, state = collapse, controlHaze = controlHaze) {
     BoxWithConstraints(Modifier.fillMaxSize().pointerInput(readUpTo) {
         awaitPointerEventScope {
             var down: Offset? = null
@@ -2057,7 +2058,8 @@ private fun Messages(
         val side = 16.dp + ((maxWidth - READING_WIDTH) / 2).coerceAtLeast(0.dp)
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().nestedScroll(readBack),
+            modifier = Modifier.fillMaxSize().nestedScroll(readBack)
+                .then(if (controlHaze != null) Modifier.hazeSource(controlHaze) else Modifier),
             contentPadding = PaddingValues(start = side, end = side, top = 12.dp, bottom = 12.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(if (isDesktop) 16.dp else 20.dp, Alignment.Bottom),
         ) {
@@ -2168,12 +2170,13 @@ private fun Messages(
             visible = awayFromBottom && LocalTranscriptCollapse.current?.active == null,
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut(),
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp + controlsInset),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp + controlsInset - if (controlHaze != null) TranscriptControlRim else 0.dp),
         ) {
             val shape = RoundedCornerShape(Theme[radii][radiusMedium])
             // A pointer-sized button on the desktop, named on a rest over it.
             val size = if (isDesktop) 34.dp else 40.dp
             val jumpLabel = stringResource(Res.string.chat_jump_latest)
+            TranscriptControlBackdrop(shape, controlHaze) {
             Tooltip(if (isDesktop && !newBelow) jumpLabel else "") { UnstyledButton(
                 onClick = {
                     readerNavigated = true
@@ -2186,7 +2189,7 @@ private fun Messages(
                     .heightIn(min = size)
                     .handCursor()
                     .widthIn(min = size)
-                    .transcriptControlRim(shape)
+                    .transcriptControlOutline(shape)
                     .clip(shape)
                     .background(if (newBelow) Theme[colors][accent] else Theme[colors][surfaceElevated])
                     .border(1.dp, if (newBelow) Theme[colors][accent] else Theme[colors][strokeStrong], shape)
@@ -2209,6 +2212,7 @@ private fun Messages(
                     if (newBelow) Text(stringResource(Res.string.chat_new_reply), style = Theme[typography][label], color = tint)
                 }
             } }
+            }
         }
     }
     }
