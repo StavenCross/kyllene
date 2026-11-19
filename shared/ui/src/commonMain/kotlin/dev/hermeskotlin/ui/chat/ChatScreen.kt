@@ -2900,10 +2900,12 @@ internal fun AssistantReply(
                 CopyableOnDesktop { Text(warningText, style = Theme[typography][bodySmall], color = Theme[colors][warning]) }
             }
         }
-        if (!message.streaming && (message.userReaction != null || (onReact != null && message.reactionRowId != null))) {
+        val react = onReact.takeIf { !message.streaming && message.reactionRowId != null }
+        val reaction = message.userReaction.takeUnless { message.streaming }
+        if (isDesktop && (reaction != null || react != null)) {
             ReplyReactionMenu(
-                reaction = message.userReaction,
-                onReact = onReact.takeIf { message.reactionRowId != null },
+                reaction = reaction,
+                onReact = react,
                 modifier = Modifier.align(Alignment.End),
             )
         }
@@ -2942,7 +2944,7 @@ internal fun AssistantReply(
                     )
                 }
             }
-        } else if (actionable || usage != null) {
+        } else if (!isDesktop && (actionable || usage != null || reaction != null || react != null)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // The count takes only what the actions leave: at the largest text it ellipsizes instead of squeezing them out.
                 if (usage != null) {
@@ -2959,16 +2961,24 @@ internal fun AssistantReply(
                     Spacer(Modifier.weight(1f))
                 }
                 if (actionable) {
-                    // On the end, under the thumb of the hand holding the phone; Copy, the one used most, sits last.
-                    // Copy's padding trimmed off the end lines its icon up with the reply's edge; all of them lose 4dp on top to sit close under it.
-                    val action = Modifier.trimEndTop(end = 0.dp, top = 4.dp)
-                    onBranch?.let { ReplyAction(Lucide.GitBranch, branchLabel, it, action) }
-                    onRegenerate?.let { ReplyAction(Lucide.RefreshCw, regenerateLabel, it, action) }
+                    CopyButton(text, visibleLabel = copyLabel)
+                }
+                val actions = if (actionable) listOfNotNull(
+                    onBranch?.let { RowMenuItem(branchLabel, Lucide.GitBranch, run = it) },
+                    onRegenerate?.let { RowMenuItem(regenerateLabel, Lucide.RefreshCw, run = it) },
                     when {
-                        reading -> ReplyAction(Lucide.Square, stopReadingLabel, onStopReading, action)
-                        speakable && onReadAloud != null -> ReplyAction(Lucide.Volume2, readAloudLabel, { onReadAloud(text) }, action)
-                    }
-                    CopyButton(text, Modifier.trimEndTop(end = 16.dp, top = 4.dp).size(MinTouchTarget))
+                        reading -> RowMenuItem(stopReadingLabel, Lucide.Square, run = onStopReading)
+                        speakable && onReadAloud != null -> RowMenuItem(readAloudLabel, Lucide.Volume2) { onReadAloud(text) }
+                        else -> null
+                    },
+                ) else emptyList()
+                if (reaction != null || react != null || actions.isNotEmpty()) {
+                    ReplyReactionMenu(
+                        reaction = reaction,
+                        onReact = react,
+                        actions = actions,
+                        showLabel = true,
+                    )
                 }
             }
         }
