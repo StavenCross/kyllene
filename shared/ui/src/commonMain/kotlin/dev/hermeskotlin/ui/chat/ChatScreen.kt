@@ -2186,6 +2186,7 @@ private fun Messages(
                     .heightIn(min = size)
                     .handCursor()
                     .widthIn(min = size)
+                    .transcriptControlRim(shape)
                     .clip(shape)
                     .background(if (newBelow) Theme[colors][accent] else Theme[colors][surfaceElevated])
                     .border(1.dp, if (newBelow) Theme[colors][accent] else Theme[colors][strokeStrong], shape)

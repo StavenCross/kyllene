@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
@@ -21,8 +22,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -32,6 +39,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import com.composeunstyled.theme.Theme
+import dev.hermeskotlin.designsystem.background
+import dev.hermeskotlin.designsystem.colors
+import dev.hermeskotlin.designsystem.textSecondary
+import dev.hermeskotlin.ui.isDesktop
 import dev.hermeskotlin.designsystem.components.Button
 import dev.hermeskotlin.designsystem.components.ButtonSize
 import dev.hermeskotlin.designsystem.components.ButtonVariant
@@ -83,7 +95,8 @@ internal fun TranscriptCollapseHost(
                     variant = ButtonVariant.Secondary,
                     size = ButtonSize.Small,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = bottomInset + 8.dp)
-                        .heightIn(min = MinTouchTarget),
+                        .heightIn(min = MinTouchTarget)
+                        .transcriptControlRim(CircleShape),
                 )
             }
         }
@@ -114,4 +127,23 @@ internal fun TranscriptCollapseSection(expanded: Boolean, label: String, onClose
         val top = it.positionInWindow()
         target.bounds = Rect(top.x, top.y, top.x + it.size.width, top.y + it.size.height)
     }) { content() }
+}
+
+/** A small opaque rim clears transcript text around an Android control without changing its layout. */
+@Composable
+internal fun Modifier.transcriptControlRim(shape: Shape): Modifier {
+    if (isDesktop) return this
+    val backdrop = Theme[colors][background].copy(alpha = 1f)
+    val edge = Theme[colors][textSecondary]
+    return drawWithCache {
+        val rim = 3.dp.toPx()
+        val border = 1.dp.toPx()
+        val outer = shape.createOutline(Size(size.width + rim * 2, size.height + rim * 2), layoutDirection, this)
+        val inner = shape.createOutline(Size(size.width - border, size.height - border), layoutDirection, this)
+        onDrawWithContent {
+            translate(-rim, -rim) { drawOutline(outer, backdrop) }
+            drawContent()
+            translate(border / 2, border / 2) { drawOutline(inner, edge, style = Stroke(border)) }
+        }
+    }
 }
