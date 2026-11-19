@@ -7,7 +7,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -62,12 +63,14 @@ class ReplyActionsFitTest {
                             ChatMessage.Assistant(
                                 key = "reply",
                                 text = "Done.",
+                                reactionRowId = 1,
                                 usage = TurnUsage(input = 184_000, output = 61_200, reasoning = 0, calls = 1),
                             ),
                             onBranch = {},
                             onRegenerate = {},
                             last = true,
                             onReadAloud = {},
+                            onReact = {},
                         )
                     }
                 }
@@ -75,10 +78,18 @@ class ReplyActionsFitTest {
         }
         composeRule.waitForIdle()
         val touch = with(composeRule.density) { 48.dp.toPx() }
-        for (action in listOf("Branch from here", "Regenerate", "Read aloud", "Copy")) {
-            val node = composeRule.onAllNodes(hasContentDescription(action)).fetchSemanticsNodes().single()
-            assertTrue(node.boundsInRoot.width >= touch - 1, "$action is ${node.boundsInRoot.width}px wide, expected the full ${touch}px touch target")
+        val copy = composeRule.onNodeWithText("Copy").fetchSemanticsNode().boundsInRoot
+        val more = composeRule.onNodeWithText("More").fetchSemanticsNode().boundsInRoot
+        assertTrue(copy.width >= touch - 1 && more.width >= touch - 1)
+        assertTrue(kotlin.math.abs(copy.center.y - more.center.y) < 1f)
+        assertTrue(copy.right <= more.left)
+
+        composeRule.onNodeWithText("More").performClick()
+        val menuLabels = listOf("Got it", "Continue", "Verify", "Explain", "Branch from here", "Regenerate", "Read aloud")
+        val labelStarts = menuLabels.map { label ->
+            composeRule.onNodeWithText(label, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
         }
+        assertTrue(labelStarts.max() - labelStarts.min() < 1f, "The emoji and command labels should share a column")
     }
 
     /** Registers the Compose host activity Robolectric would otherwise fail to resolve. */

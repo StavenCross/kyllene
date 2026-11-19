@@ -71,10 +71,15 @@ internal fun ReplyReactionMenu(
                             ReplyReaction.Verify -> Res.string.chat_react_verify
                             ReplyReaction.Explain -> Res.string.chat_react_explain
                         })
-                        MenuRow("${item.emoji}  $label", icon = null, onClick = {
-                            open = false
-                            onReact(item)
-                        })
+                        MenuRow(
+                            text = if (showLabel) label else "${item.emoji}  $label",
+                            icon = null,
+                            leadingEmoji = item.emoji.takeIf { showLabel },
+                            onClick = {
+                                open = false
+                                onReact(item)
+                            },
+                        )
                     }
                 }
                 for (action in actions) {
