@@ -55,7 +55,8 @@ object TranscriptRows {
 
     /** User rows that are machinery the agent reads but nobody needs to see. */
     fun isNoise(row: String, displayKind: String?): Boolean =
-        (displayKind == "internal_notification" && routine(row) == null) || row.startsWith("[System:") || HEARTBEAT.containsMatchIn(row)
+        (displayKind == "internal_notification" && routine(row) == null && AgentMessage.parse(row) == null) ||
+            row.startsWith("[System:") || HEARTBEAT.containsMatchIn(row)
 
     /** Older gateways/plugins kept handoffs under either user or assistant without a display kind. */
     fun compaction(text: String): TranscriptEvent.Compaction? {
