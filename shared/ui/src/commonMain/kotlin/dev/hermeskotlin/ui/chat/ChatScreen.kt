@@ -968,7 +968,7 @@ internal fun ChatView(
             // and undo the fold; only the jump button and the pet follow the composer's real height.
             var composerShrink by remember { mutableIntStateOf(0) }
             val listInset = with(LocalDensity.current) { (dockHeight + composerShrink).toDp() }
-            // The dock frosts the transcript on desktop and its own solid backdrop on Android.
+            // The dock panels frost their solid backdrop, so transcript text cannot show through.
             val hazeState = rememberHazeState()
             // Comments wait in the composer, so the selection menus offer them only while it shows.
             var focusComment by remember { mutableStateOf<Long?>(null) }
@@ -1075,7 +1075,7 @@ internal fun ChatView(
                 }
             }
             Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { paneHeight = it.height; paneWidth = it.width }) {
-                Box(Modifier.fillMaxSize().then(if (isDesktop) Modifier.hazeSource(hazeState) else Modifier)) {
+                Box(Modifier.fillMaxSize()) {
                     if (wallpaper != null) ChatWallpaper(wallpaper, LocalAppSettings.current.wallpaperStrength, Modifier.fillMaxSize())
                     if (state.historyLoaded && state.messages.isNotEmpty()) {
                         CompositionLocalProvider(
@@ -1194,10 +1194,8 @@ internal fun ChatView(
                         .fillMaxWidth()
                         .onSizeChanged { dockHeight = it.height },
                 ) {
-                    if (!isDesktop) {
-                        // Measure with the dock so the gap stays covered throughout the collapse animation.
-                        Box(Modifier.matchParentSize().hazeSource(hazeState).background(Theme[colors][background].copy(alpha = 1f)))
-                    }
+                    // Measure with the dock so the gap stays covered throughout the collapse animation.
+                    Box(Modifier.matchParentSize().hazeSource(hazeState).background(Theme[colors][background].copy(alpha = 1f)))
                     Column {
                         Dock(
                             hazeState = hazeState,
