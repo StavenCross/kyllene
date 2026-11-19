@@ -1,6 +1,7 @@
 package dev.hermeskotlin.desktop
 
 import dev.hermeskotlin.core.inbox.InboxRun
+import dev.hermeskotlin.core.chat.replyTextOrNull
 import dev.hermeskotlin.core.push.PushMessage
 import dev.hermeskotlin.desktop.resources.*
 import org.jetbrains.compose.resources.getString
@@ -25,7 +26,8 @@ internal suspend fun desktopPushNotice(
             val bot = message.bot?.takeIf { PROFILE.matches(it) } ?: return null
             val session = message.session?.takeIf { SESSION.matches(it) } ?: return null
             val label = cleanLabel(message.label).ifBlank { bot }
-            PushNotice(DesktopNotice(label, preview(message.text, getString(Res.string.notice_reply_in)), session, label),
+            val text = message.text?.replyTextOrNull() ?: return null
+            PushNotice(DesktopNotice(label, preview(text, getString(Res.string.notice_reply_in)), session, label),
                 bot.takeUnless { it == "default" }, PushDestination.Bot(bot, label, session))
         }
         PushMessage.CRON_RUN -> {
