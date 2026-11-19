@@ -47,7 +47,7 @@ internal fun ReplyReactionMenu(
             Box(Modifier.onGloballyPositioned { anchor = it.boundsInWindow() }) {
                 if (showLabel) {
                     Button(
-                        text = stringResource(Res.string.sessions_drawer_more),
+                        text = stringResource(Res.string.chat_reply_more),
                         onClick = { open = true },
                         modifier = (if (open) Modifier else buttonModifier).heightIn(min = MinTouchTarget),
                         variant = ButtonVariant.Ghost,

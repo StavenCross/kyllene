@@ -512,6 +512,7 @@
     <string name="chat_read_aloud">Read aloud</string>
     <string name="chat_stop_reading">Stop reading</string>
     <string name="chat_message_actions">Message actions</string>
+    <string name="chat_reply_more">More</string>
     <string name="chat_queued">Queued · sends after this task</string>
     <string name="chat_editing_in_composer">Editing in the composer</string>
     <string name="chat_jump_latest">Jump to latest</string>
