@@ -19,7 +19,9 @@
     <string name="android_attach_not_image">%1$s konnte nicht als Bild gelesen werden.</string>
     <string name="android_attach_too_much">Das sind mehr als 50 MB Anhänge auf einmal.</string>
 
-    <string name="android_widget_update_webview">Aktualisiere Android System WebView, um dieses Widget auszuführen.</string>
+    <string name="android_widget_update_webview">Dieses Widget benötigt eine neuere Version von Android System WebView.</string>
+    <string name="android_widget_update_action">WebView aktualisieren</string>
+    <string name="android_widget_update_unavailable">Suche im App-Store oder in den Systemeinstellungen nach einem WebView-Update.</string>
     <string name="android_widget_failed">Dieses Widget konnte nicht angezeigt werden.</string>
 
     <string name="android_save_needs_android_10">Speichern braucht Android 10. Nutze stattdessen Teilen.</string>

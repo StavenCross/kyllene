@@ -19,7 +19,9 @@
     <string name="android_attach_not_image">无法将 %1$s 读取为图片。</string>
     <string name="android_attach_too_much">一次附加的文件超过了 50 MB。</string>
 
-    <string name="android_widget_update_webview">请更新 Android System WebView 以运行此小组件。</string>
+    <string name="android_widget_update_webview">此小组件需要较新版本的 Android System WebView。</string>
+    <string name="android_widget_update_action">更新 WebView</string>
+    <string name="android_widget_update_unavailable">请在应用商店或系统设置中检查 WebView 更新。</string>
     <string name="android_widget_failed">无法显示此小组件。</string>
 
     <string name="android_save_needs_android_10">保存需要 Android 10。请改用分享。</string>

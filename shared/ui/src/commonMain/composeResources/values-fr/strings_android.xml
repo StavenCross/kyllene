@@ -19,7 +19,9 @@
     <string name="android_attach_not_image">Impossible de lire %1$s comme image.</string>
     <string name="android_attach_too_much">Cela fait plus de 50 Mo de pièces jointes à la fois.</string>
 
-    <string name="android_widget_update_webview">Mettez à jour Android System WebView pour exécuter ce widget.</string>
+    <string name="android_widget_update_webview">Ce widget nécessite une version plus récente d’Android System WebView.</string>
+    <string name="android_widget_update_action">Mettre à jour WebView</string>
+    <string name="android_widget_update_unavailable">Recherchez une mise à jour de WebView dans la boutique d’applications ou dans les paramètres système.</string>
     <string name="android_widget_failed">Impossible d’afficher ce widget.</string>
 
     <string name="android_save_needs_android_10">L’enregistrement nécessite Android 10. Utilisez plutôt Partager.</string>

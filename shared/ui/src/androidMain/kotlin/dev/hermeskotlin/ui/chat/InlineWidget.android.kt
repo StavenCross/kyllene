@@ -1,9 +1,15 @@
 package dev.hermeskotlin.ui.chat
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.ViewGroup
@@ -15,33 +21,55 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.composeunstyled.Text
+import com.composeunstyled.theme.Theme
 import dev.hermeskotlin.designsystem.R
+import dev.hermeskotlin.designsystem.bodySmall
+import dev.hermeskotlin.designsystem.colors
+import dev.hermeskotlin.designsystem.components.Button
+import dev.hermeskotlin.designsystem.components.ButtonVariant
+import dev.hermeskotlin.designsystem.text
+import dev.hermeskotlin.designsystem.textSecondary
+import dev.hermeskotlin.designsystem.typography
+import dev.hermeskotlin.ui.resources.*
+import org.jetbrains.compose.resources.stringResource
 import java.io.ByteArrayInputStream
 import kotlin.io.encoding.Base64
 import kotlin.math.hypot
-import dev.hermeskotlin.ui.resources.*
-import org.jetbrains.compose.resources.stringResource
 
 /** Untrusted widget HTML gets no gateway origin, cookies, storage, native bridge or network. */
 @Composable
 internal actual fun WidgetWebView(html: String, theme: WidgetTheme, name: String, modifier: Modifier, onReport: (WidgetReport) -> Unit, onFailure: (String) -> Unit) {
     val context = LocalContext.current
-    val failure = rememberUpdatedState(onFailure)
-    val report = rememberUpdatedState(onReport)
-    val supported = remember { supportsWidgetIsolation(WebView.getCurrentWebViewPackage()?.versionName) }
-    if (!supported) {
-        val update = stringResource(Res.string.android_widget_update_webview)
-        LaunchedEffect(Unit) { failure.value(update) }
+    var provider by remember { mutableStateOf(WebView.getCurrentWebViewPackage()) }
+    if (!supportsWidgetIsolation(provider?.versionName)) {
+        WidgetWebViewRecovery(
+            openUpdate = { openWebViewUpdate(context, provider?.packageName) },
+            onRetry = { provider = WebView.getCurrentWebViewPackage() },
+        )
         return
     }
+    val failure = rememberUpdatedState(onFailure)
+    val report = rememberUpdatedState(onReport)
     val failed = rememberUpdatedState(stringResource(Res.string.android_widget_failed))
     val font = remember { widgetFont(context) }
     val document = remember(html, theme, font) { widgetDocument(html, theme, font) }
@@ -57,6 +85,78 @@ internal actual fun WidgetWebView(html: String, theme: WidgetTheme, name: String
             it.loadUrl(WIDGET_URL)
         }
     })
+}
+
+@Composable
+private fun WidgetWebViewRecovery(openUpdate: () -> Boolean, onRetry: () -> Unit) {
+    var updateFailed by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            stringResource(Res.string.android_widget_update_webview),
+            style = Theme[typography][bodySmall],
+            color = Theme[colors][text],
+        )
+        if (updateFailed) {
+            Text(
+                stringResource(Res.string.android_widget_update_unavailable),
+                style = Theme[typography][bodySmall],
+                color = Theme[colors][textSecondary],
+            )
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val stack = maxWidth < 240.dp * LocalDensity.current.fontScale
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val button = Modifier.heightIn(min = 48.dp)
+                Button(
+                    stringResource(Res.string.android_widget_update_action),
+                    onClick = { updateFailed = !openUpdate() },
+                    modifier = if (stack) button.fillMaxWidth() else button.weight(1.4f),
+                )
+                Button(
+                    stringResource(Res.string.chat_retry),
+                    onClick = {
+                        updateFailed = false
+                        onRetry()
+                    },
+                    modifier = if (stack) button.fillMaxWidth() else button.weight(1f),
+                    variant = ButtonVariant.Outline,
+                )
+            }
+        }
+    }
+}
+
+private fun openWebViewUpdate(context: Context, providerPackage: String?): Boolean {
+    fun launch(intent: Intent): Boolean {
+        if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
+    }
+
+    // The Android Open Source Project provider is supplied by the system image.
+    if (providerPackage == "com.android.webview") {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA &&
+            Build.VERSION.SDK_INT_FULL >= Build.VERSION_CODES_FULL.BAKLAVA_1 &&
+            launch(Intent(Settings.ACTION_SYSTEM_UPDATE_SETTINGS))
+        ) return true
+        return launch(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS))
+    }
+    val packageId = Uri.encode(providerPackage ?: "com.google.android.webview")
+    return launch(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageId"))) ||
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageId")))
 }
 
 private const val WIDGET_URL = "https://herald-widget.invalid/"

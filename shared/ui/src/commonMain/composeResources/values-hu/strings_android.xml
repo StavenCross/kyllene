@@ -19,7 +19,9 @@
     <string name="android_attach_not_image">Nem sikerült képként beolvasni: %1$s.</string>
     <string name="android_attach_too_much">Ez egyszerre több mint 50 MB melléklet.</string>
 
-    <string name="android_widget_update_webview">Frissítsd az Android System WebView-t a widget futtatásához.</string>
+    <string name="android_widget_update_webview">Ehhez a widgethez az Android System WebView újabb verziója szükséges.</string>
+    <string name="android_widget_update_action">WebView frissítése</string>
+    <string name="android_widget_update_unavailable">Keress WebView-frissítést az alkalmazásboltban vagy a rendszerbeállításokban.</string>
     <string name="android_widget_failed">Nem sikerült megjeleníteni ezt a widgetet.</string>
 
     <string name="android_save_needs_android_10">A mentéshez Android 10 kell. Használd inkább a Megosztást.</string>

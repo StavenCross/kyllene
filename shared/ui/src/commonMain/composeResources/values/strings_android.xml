@@ -27,7 +27,9 @@
     <string name="android_attach_too_much">That’s more than 50 MB of attachments at once.</string>
 
     <!-- Widgets in a reply -->
-    <string name="android_widget_update_webview">Update Android System WebView to run this widget.</string>
+    <string name="android_widget_update_webview">This widget needs a newer Android System WebView.</string>
+    <string name="android_widget_update_action">Update WebView</string>
+    <string name="android_widget_update_unavailable">Check your app store or system settings for a WebView update.</string>
     <string name="android_widget_failed">Couldn’t display this widget.</string>
 
     <!-- Saving a file or picture -->
