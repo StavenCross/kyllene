@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -78,6 +79,7 @@ import dev.hermeskotlin.core.models.toggleStar
 import dev.hermeskotlin.core.settings.AppSettings
 import dev.hermeskotlin.designsystem.accent
 import dev.hermeskotlin.designsystem.body
+import dev.hermeskotlin.designsystem.bodySmall
 import dev.hermeskotlin.designsystem.caption
 import dev.hermeskotlin.designsystem.colors
 import dev.hermeskotlin.designsystem.components.Button
@@ -89,12 +91,14 @@ import dev.hermeskotlin.designsystem.components.handCursor
 import dev.hermeskotlin.designsystem.label
 import dev.hermeskotlin.designsystem.radii
 import dev.hermeskotlin.designsystem.radiusMedium
+import dev.hermeskotlin.designsystem.stroke
 import dev.hermeskotlin.designsystem.strokeStrong
 import dev.hermeskotlin.designsystem.surface2
 import dev.hermeskotlin.designsystem.surface3
 import dev.hermeskotlin.designsystem.text as textColor
 import dev.hermeskotlin.designsystem.textSecondary
 import dev.hermeskotlin.designsystem.textTertiary
+import dev.hermeskotlin.designsystem.title
 import dev.hermeskotlin.designsystem.typography
 import dev.hermeskotlin.ui.LocalAppSettings
 import dev.hermeskotlin.ui.arrowFocus
@@ -246,11 +250,32 @@ internal fun ColumnScope.QuickModelList(
     picker: ModelPickerState, selection: ModelSelection, query: TextFieldState, note: String?,
     onBack: () -> Unit, onRefresh: () -> Unit, onPick: (ModelOption) -> Unit,
     onSettings: ((AppSettings) -> AppSettings) -> Unit,
+    currentEffort: ReasoningEffort?,
 ) {
     Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(Lucide.ChevronLeft, stringResource(Res.string.common_back), onClick = onBack)
-        Text(stringResource(Res.string.chat_quick_model_title), style = Theme[typography][label],
+        Text(stringResource(if (isDesktop) Res.string.chat_quick_model_title else Res.string.chat_model_models),
+            style = if (isDesktop) Theme[typography][label] else Theme[typography][title],
             color = Theme[colors][textColor], modifier = Modifier.semantics { heading() })
+    }
+    if (!isDesktop && (selection.model != null || currentEffort != null)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            selection.model?.let {
+                Text(displayModelName(it), Modifier.weight(1f), style = Theme[typography][bodySmall],
+                    color = Theme[colors][textColor], maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            currentEffort?.let {
+                Text(
+                    "${stringResource(Res.string.chat_model_thinking)} · ${effortLabel(it)}",
+                    style = Theme[typography][bodySmall], color = Theme[colors][textSecondary],
+                )
+            }
+        }
+        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(Theme[colors][stroke]))
     }
     val status = if (picker.saving) stringResource(Res.string.chat_model_saving) else picker.saveError ?: note
     status?.let { Text(it, Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -283,6 +308,7 @@ internal fun ColumnScope.QuickModelList(
         stars.distinct().mapNotNull(byKey::get).map { PickerModel(displayModelName(it.id), listOf(it)) }
     }
     val matchingKeys = remember(matches) { matches.map { it.starKey }.toSet() }
+    val searchSpansProviders = remember(matches) { matches.map { it.provider }.distinct().size > 1 }
     var expanded by remember(catalog.providers.map { it.slug }) {
         mutableStateOf(setOfNotNull(selection.provider ?: catalog.providers.firstOrNull()?.slug))
     }
@@ -304,17 +330,18 @@ internal fun ColumnScope.QuickModelList(
         },
     )
 
-    val rowContent: @Composable (PickerModel) -> Unit = { row ->
+    val rowContent: @Composable (PickerModel, Boolean) -> Unit = { row, showProvider ->
         val option = row.variants.single()
-        ModelRow(row, selection, option.starKey in stars, names, showId = row.name in repeatedNames,
+        ModelRow(row, selection, option.starKey in stars, names.takeIf { showProvider }, showId = row.name in repeatedNames,
             onClick = { onPick(option) }, onPickVariant = onPick,
             onToggleStar = { onSettings { it.copy(starredModels = it.starredModels.toggleStar(row, option)) } }, compact = true)
     }
-    ScrollbarBox(list, Modifier.fillMaxWidth().then(if (isDesktop) Modifier.weight(1f, fill = false) else Modifier)) {
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 410.dp).arrowFocus(), state = list) {
+    ScrollbarBox(list, Modifier.fillMaxWidth().weight(1f, fill = !isDesktop)) {
+        val listHeight = if (isDesktop) Modifier.heightIn(max = 410.dp) else Modifier.fillMaxHeight()
+        LazyColumn(Modifier.fillMaxWidth().then(listHeight).arrowFocus(), state = list) {
             if (favoriteRows.isNotEmpty()) {
                 item("favorites") { SectionLabel(stringResource(Res.string.chat_quick_model_favorites)) }
-                items(favoriteRows, key = { "favorite-${it.variants.single().starKey}" }) { rowContent(it) }
+                items(favoriteRows, key = { "favorite-${it.variants.single().starKey}" }) { rowContent(it, true) }
             }
             item("providers") { SectionLabel(stringResource(Res.string.chat_quick_model_providers)) }
             for (provider in catalog.providers) {
@@ -336,7 +363,9 @@ internal fun ColumnScope.QuickModelList(
                         }
                     }
                 }
-                if (open) items(models, key = { "model-${it.variants.single().starKey}" }) { rowContent(it) }
+                if (open) items(models, key = { "model-${it.variants.single().starKey}" }) {
+                    rowContent(it, isDesktop || searchSpansProviders)
+                }
             }
             if (if (needle.isEmpty()) allRows.values.all { it.isEmpty() } else matches.isEmpty()) {
                 item("empty") {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -219,10 +220,15 @@ internal fun ModelSheet(
             popoverPage = choosingModel,
         ) {
             if (choosingModel) {
-                QuickModelList(
-                    picker, selection, query, note, onBack = { choosingModel = false }, onRefresh = onRefresh,
-                    onPick = { picked = it; onSelectModel(it) }, onSettings = onSettings,
-                )
+                val models: @Composable ColumnScope.() -> Unit = {
+                    QuickModelList(
+                        picker, selection, query, note, onBack = { choosingModel = false }, onRefresh = onRefresh,
+                        onPick = { picked = it; onSelectModel(it) }, onSettings = onSettings,
+                        currentEffort = state.effort(selection.option),
+                    )
+                }
+                if (isDesktop || picker.catalog == null) models()
+                else Column(Modifier.fillMaxWidth().fillMaxHeight(.82f), content = models)
             } else {
                 val providerLabel = selection.provider?.let { name ->
                     displayProviderName(name, picker.catalog?.providers?.firstOrNull { it.slug == name }?.name)
