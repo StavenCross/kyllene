@@ -87,6 +87,7 @@ import dev.hermeskotlin.designsystem.bodySmall
 import dev.hermeskotlin.designsystem.caption
 import dev.hermeskotlin.designsystem.colors
 import dev.hermeskotlin.designsystem.components.BottomSheet
+import dev.hermeskotlin.designsystem.components.LocalBottomSheetSettled
 import dev.hermeskotlin.designsystem.components.Button
 import dev.hermeskotlin.designsystem.components.ButtonVariant
 import dev.hermeskotlin.designsystem.components.Chip
@@ -226,7 +227,10 @@ internal fun ModelSheet(
                 val providerLabel = selection.provider?.let { name ->
                     displayProviderName(name, picker.catalog?.providers?.firstOrNull { it.slug == name }?.name)
                 }
-                QuickEffortPanel(state, selection, providerLabel, visible, onSelectEffort, onFast, onOpenModels = { choosingModel = true })
+                QuickEffortPanel(
+                    state, selection, providerLabel, visible && LocalBottomSheetSettled.current, onSelectEffort, onFast,
+                    onOpenModels = { choosingModel = true },
+                )
             }
         }
         return

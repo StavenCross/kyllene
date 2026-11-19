@@ -145,8 +145,10 @@ private fun EffortSlider(
         wasVisible = visible
         shimmer.snapTo(if (visible) 0f else 1f)
         if (visible) {
-            // Let the sheet start opening before the glints begin.
-            shimmer.animateTo(1f, tween(durationMillis = 420, delayMillis = if (opening) 100 else 0))
+            // A phone waits until its sheet has settled before it starts the glints.
+            val duration = if (isDesktop) 420 else 720
+            val delay = if (opening && isDesktop) 100 else 0
+            shimmer.animateTo(1f, tween(durationMillis = duration, delayMillis = delay))
         }
     }
     val label = stringResource(Res.string.chat_quick_model_effort)
@@ -181,8 +183,8 @@ private fun EffortSlider(
                 }
                 val progress = shimmer.value
                 if (progress > 0f && progress < 1f && end > 12.dp.toPx()) {
-                    val color = Color.White.copy(alpha = .7f * (1f - progress))
-                    val radius = 3.dp.toPx()
+                    val color = Color.White.copy(alpha = (if (isDesktop) .7f else .86f) * (1f - progress))
+                    val radius = (if (isDesktop) 3.dp else 4.dp).toPx()
                     clipRect(right = end) {
                         repeat(3) { glint ->
                             val x = end * (.16f + glint * .24f + progress * .11f)
