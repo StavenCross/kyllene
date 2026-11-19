@@ -1761,31 +1761,12 @@ private fun NavGrid(links: List<NavLink>, inset: Dp = 6.dp) {
 
 @Composable
 internal fun DrawerNavigation(mode: SidebarMode, links: List<NavLink>) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    var moreOpen by remember { mutableStateOf(false) }
+    var expanded by rememberSaveable(mode) { mutableStateOf(false) }
+    val inbox = links.firstOrNull { mode == SidebarMode.Bots && it.icon == Lucide.Inbox }
+    val tools = if (inbox == null) links else links.filter { it !== inbox }
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
-        if (mode == SidebarMode.Bots) {
-            val inbox = links.firstOrNull { it.icon == Lucide.Inbox }
-            val more = links.filter { it !== inbox }
-            inbox?.let { NavTile(it, Modifier.fillMaxWidth(), compact = true) }
-            if (more.isNotEmpty()) {
-                DropdownMenu(
-                    expanded = moreOpen,
-                    onExpandedChange = { moreOpen = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    above = true,
-                    alignment = AnchorAlignment.Start,
-                    items = { more.forEach { link -> MenuAction(link.label, link.icon, link.onClick) } },
-                ) {
-                    NavTile(
-                        NavLink(Lucide.Ellipsis, stringResource(Res.string.sessions_drawer_more)) { moreOpen = true },
-                        Modifier.fillMaxWidth(),
-                        compact = true,
-                        trailing = Lucide.ChevronRight,
-                    )
-                }
-            }
-        } else if (links.isNotEmpty()) {
+        inbox?.let { NavTile(it, Modifier.fillMaxWidth(), compact = true) }
+        if (tools.isNotEmpty()) {
             val state = stringResource(if (expanded) Res.string.sessions_expanded else Res.string.sessions_collapsed)
             NavTile(
                 NavLink(Lucide.Wrench, stringResource(Res.string.sessions_drawer_tools)) { expanded = !expanded },
@@ -1797,7 +1778,7 @@ internal fun DrawerNavigation(mode: SidebarMode, links: List<NavLink>) {
                 val room = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
                 val limit = (room * 0.3f).coerceIn(48.dp, 224.dp)
                 Column(Modifier.fillMaxWidth().heightIn(max = limit).verticalScrollWithBar().padding(start = 12.dp)) {
-                    links.forEach { link ->
+                    tools.forEach { link ->
                         NavTile(
                             NavLink(link.icon, link.label, link.badge, link.selected) {
                                 if (!isDesktop) expanded = false

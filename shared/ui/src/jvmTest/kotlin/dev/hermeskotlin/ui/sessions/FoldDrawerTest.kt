@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class FoldDrawerTest {
     @Test
-    fun chatToolsExpandAndBotToolsMoveUnderMore() = runComposeUiTest {
+    fun chatsAndBotsUseTheSameToolsAccordion() = runComposeUiTest {
         var mode by mutableStateOf(SidebarMode.Chats)
         var opened: String? = null
         setContent {
@@ -50,11 +50,16 @@ class FoldDrawerTest {
         onNodeWithText("Inbox").assertIsDisplayed()
         onNodeWithText("Scheduled").performClick()
         runOnIdle { assertEquals("scheduled", opened); mode = SidebarMode.Bots }
-        onNodeWithText("Tools").assertDoesNotExist()
+        onNodeWithText("Tools").assertIsDisplayed()
         onNodeWithText("Inbox").assertIsDisplayed().performClick()
         onNodeWithText("Scheduled").assertDoesNotExist()
-        onNodeWithText("More").performClick()
-        onNodeWithText("Scheduled").assertIsDisplayed()
+        onNodeWithText("More").assertDoesNotExist()
+        onNodeWithText("Tools").performClick()
+        onNodeWithText("Scheduled").assertIsDisplayed().performClick()
+        runOnIdle { assertEquals("scheduled", opened) }
+        onNodeWithText("Tools").performClick()
+        onNodeWithText("Scheduled").assertDoesNotExist()
+        onNodeWithText("Inbox").assertIsDisplayed()
     }
 
     @Test
