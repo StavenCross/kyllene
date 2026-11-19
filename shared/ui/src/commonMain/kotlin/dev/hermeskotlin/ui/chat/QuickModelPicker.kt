@@ -105,7 +105,8 @@ import kotlin.math.roundToInt
 
 @Composable
 internal fun QuickEffortPanel(
-    state: ChatState, selection: ModelSelection, providerLabel: String?, onSelect: (ReasoningEffort) -> Unit,
+    state: ChatState, selection: ModelSelection, providerLabel: String?, visible: Boolean,
+    onSelect: (ReasoningEffort) -> Unit,
     onFast: (Boolean) -> Unit, onOpenModels: () -> Unit,
 ) {
     val option = selection.option
@@ -116,7 +117,7 @@ internal fun QuickEffortPanel(
             color = Theme[colors][textColor], modifier = Modifier.semantics { heading() },
         )
         if (efforts.size > 1) {
-            key(selection.provider, selection.model) { EffortSlider(efforts, state.effort(option), onSelect) }
+            key(selection.provider, selection.model) { EffortSlider(efforts, state.effort(option), visible, onSelect) }
         } else if (option != null) {
             Text(stringResource(Res.string.chat_quick_model_unsupported), style = Theme[typography][caption], color = Theme[colors][textSecondary])
         }
@@ -130,18 +131,23 @@ internal fun QuickEffortPanel(
 }
 
 @Composable
-private fun EffortSlider(choices: List<ReasoningEffort>, selected: ReasoningEffort?, onSelect: (ReasoningEffort) -> Unit) {
+private fun EffortSlider(
+    choices: List<ReasoningEffort>, selected: ReasoningEffort?, visible: Boolean, onSelect: (ReasoningEffort) -> Unit,
+) {
     val index = choices.indexOf(selected).takeIf { it >= 0 }
         ?: choices.indexOf(ReasoningEffort.Default).coerceAtLeast(0)
     var value by remember(index, choices) { mutableFloatStateOf(index.toFloat()) }
     val active = value.roundToInt().coerceIn(0, choices.lastIndex)
     val shimmer = remember { Animatable(1f) }
-    var previous by remember { mutableStateOf(active) }
-    LaunchedEffect(active) {
-        if (active == previous) return@LaunchedEffect
-        previous = active
-        shimmer.snapTo(0f)
-        shimmer.animateTo(1f, tween(420))
+    var wasVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(visible, active) {
+        val opening = visible && !wasVisible
+        wasVisible = visible
+        shimmer.snapTo(if (visible) 0f else 1f)
+        if (visible) {
+            // Let the sheet start opening before the glints begin.
+            shimmer.animateTo(1f, tween(durationMillis = 420, delayMillis = if (opening) 100 else 0))
+        }
     }
     val label = stringResource(Res.string.chat_quick_model_effort)
     val choice = effortLabel(choices[active])

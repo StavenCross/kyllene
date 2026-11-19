@@ -226,7 +226,7 @@ internal fun ModelSheet(
                 val providerLabel = selection.provider?.let { name ->
                     displayProviderName(name, picker.catalog?.providers?.firstOrNull { it.slug == name }?.name)
                 }
-                QuickEffortPanel(state, selection, providerLabel, onSelectEffort, onFast, onOpenModels = { choosingModel = true })
+                QuickEffortPanel(state, selection, providerLabel, visible, onSelectEffort, onFast, onOpenModels = { choosingModel = true })
             }
         }
         return
