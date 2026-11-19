@@ -835,6 +835,19 @@ internal fun ChatView(
     /** A panel at the right, beside the conversation: the desktop's file rail. */
     rail: (@Composable () -> Unit)? = null,
 ) {
+    val mobileConnectionBanner = !isDesktop && linkStatus != null
+    var lastLinkStatus by remember { mutableStateOf("") }
+    if (linkStatus != null) lastLinkStatus = linkStatus
+    val reconnectBanner: @Composable () -> Unit = {
+        AnimatedVisibility(
+            visible = linkStatus != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = if (isDesktop) Modifier else Modifier.padding(bottom = 6.dp),
+        ) {
+            OfflineBanner(place, lastLinkStatus, onRetry = onRetryConnection)
+        }
+    }
     val canAttach = attachmentPicker != null && connected && attachments.size < OutgoingAttachment.MAX_COUNT
     var dropping by remember { mutableStateOf(false) }
     // A chat that stops taking files mid-drag takes its drop target away, which then says nothing more.
@@ -889,7 +902,7 @@ internal fun ChatView(
             TopBar(
                 title = title,
                 titleFace = titleFace,
-                status = chatStatus(state, connected, connectionLabel, place),
+                status = if (mobileConnectionBanner) null else chatStatus(state, connected, connectionLabel, place),
                 onOpenSidebar = onOpenSidebar,
                 onNewChat = onNewChat,
                 onOpenMenu = onOpenMenu,
@@ -1148,9 +1161,7 @@ internal fun ChatView(
                         }
                     }
                 }
-                // Over the top of the conversation: the link being made again, and an older page on its way.
-                var lastLinkStatus by remember { mutableStateOf("") }
-                if (linkStatus != null) lastLinkStatus = linkStatus
+                // Over the top of the conversation: another chat, a saved copy, or an older page on its way.
                 Column(
                     Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1172,16 +1183,14 @@ internal fun ChatView(
                             )
                         }
                     }
-                    AnimatedVisibility(visible = linkStatus != null, enter = fadeIn(), exit = fadeOut()) {
-                        OfflineBanner(place, lastLinkStatus, onRetry = onRetryConnection)
-                    }
+                    if (isDesktop) reconnectBanner()
                     // A chat read from the device's copy says so, and how old it is, once the gateway is known to be away;
                     // while it's only being asked, the copy is replaced without a word.
                     var lastSavedAt by remember { mutableStateOf(0L) }
                     state.savedCopyAt?.let { lastSavedAt = it }
                     val showSaved = state.savedCopyAt != null && state.messages.isNotEmpty() && (state.historyError != null || !connected)
                     AnimatedVisibility(visible = showSaved, enter = fadeIn(), exit = fadeOut()) {
-                        // Offline, the banner above offers the retry; connected, the transcript itself failed to load.
+                        // The connection banner offers the retry while offline. A connected transcript can retry itself.
                         SavedCopyPill(lastSavedAt, onRetry = if (connected) actions::retry else null)
                     }
                     AnimatedVisibility(visible = state.loadingOlder, enter = fadeIn(), exit = fadeOut()) {
@@ -1205,6 +1214,8 @@ internal fun ChatView(
                             state = state,
                             picker = picker,
                             connected = connected,
+                            connectionInBanner = mobileConnectionBanner,
+                            offlineBanner = reconnectBanner.takeUnless { isDesktop },
                             attachments = attachments,
                             attachmentError = attachmentError,
                             voiceChat = voiceChat,
@@ -1320,6 +1331,8 @@ private fun ColumnScope.Dock(
     state: ChatState,
     picker: ModelPickerState,
     connected: Boolean,
+    connectionInBanner: Boolean,
+    offlineBanner: (@Composable () -> Unit)?,
     attachments: List<OutgoingAttachment>,
     attachmentError: String?,
     voiceChat: VoiceChatState,
@@ -1394,6 +1407,7 @@ private fun ColumnScope.Dock(
     if (state.inputRequests.isNotEmpty()) {
         // The task's Stop is on the live task card above.
         InputRequestPanel(state.inputRequests, connected, onAnswer = actions::answer, onStop = null)
+        offlineBanner?.invoke()
     } else if (voiceChat.phase != VoicePhase.Off) {
         // Full screen, the voice screen has these; the panel would only animate unseen beneath it.
         if (!voiceFull) {
@@ -1407,6 +1421,7 @@ private fun ColumnScope.Dock(
                 onSendNow = actions::sendVoiceNow,
             )
         }
+        offlineBanner?.invoke()
     } else {
         // Escape puts a desktop's open list away, as a menu's does, until the typing changes; the chat's own Escape
         // (stopping a task) waits for the next press.
@@ -1488,6 +1503,8 @@ private fun ColumnScope.Dock(
                 icon = Lucide.Pencil,
             )
         }
+        // The dock's measured height keeps the transcript buttons above the reconnect banner as it folds.
+        offlineBanner?.invoke()
         Composer(
             editing = editing,
             hazeState = hazeState,
@@ -1496,6 +1513,7 @@ private fun ColumnScope.Dock(
             state = state,
             picker = picker,
             connected = connected,
+            connectionInBanner = connectionInBanner,
             attachments = attachments,
             dictation = dictation,
             comments = comments,
@@ -3892,6 +3910,7 @@ private fun Composer(
     state: ChatState,
     picker: ModelPickerState,
     connected: Boolean,
+    connectionInBanner: Boolean,
     attachments: List<OutgoingAttachment>,
     dictation: DictationState,
     comments: List<PendingComment>,
@@ -3981,7 +4000,7 @@ private fun Composer(
                         placeholder = {
                             Text(
                                 when {
-                                    !connected -> stringResource(Res.string.chat_composer_reconnecting)
+                                    !connected && !connectionInBanner -> stringResource(Res.string.chat_composer_reconnecting)
                                     comments.isNotEmpty() -> stringResource(Res.string.chat_composer_anything_else)
                                     // Mid-task a message joins the running task, by Queue or Steer.
                                     state.running -> stringResource(Res.string.chat_composer_add_to_task)
@@ -4044,7 +4063,7 @@ private fun Composer(
             {
                 FoldedComposer(
                     placeholder = when {
-                        !connected -> stringResource(Res.string.chat_composer_reconnecting)
+                        !connected && !connectionInBanner -> stringResource(Res.string.chat_composer_reconnecting)
                         state.running -> stringResource(Res.string.chat_composer_add_to_task)
                         else -> placeholder
                     },
