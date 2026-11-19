@@ -37,6 +37,7 @@ internal fun ReplyReactionMenu(
     modifier: Modifier = Modifier,
     actions: List<RowMenuItem> = emptyList(),
     showLabel: Boolean = false,
+    buttonModifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
     var anchor by remember { mutableStateOf<Rect?>(null) }
@@ -48,7 +49,7 @@ internal fun ReplyReactionMenu(
                     Button(
                         text = stringResource(Res.string.sessions_drawer_more),
                         onClick = { open = true },
-                        modifier = Modifier.heightIn(min = MinTouchTarget),
+                        modifier = (if (open) Modifier else buttonModifier).heightIn(min = MinTouchTarget),
                         variant = ButtonVariant.Ghost,
                         size = ButtonSize.Small,
                         leadingIcon = Lucide.Ellipsis,

@@ -16,6 +16,7 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.hermeskotlin.ui.clearOfWindowControls
@@ -2902,34 +2903,43 @@ internal fun AssistantReply(
         }
         val react = onReact.takeIf { !message.streaming && message.reactionRowId != null }
         val reaction = message.userReaction.takeUnless { message.streaming }
-        if (isDesktop && (reaction != null || react != null)) {
-            ReplyReactionMenu(
-                reaction = reaction,
-                onReact = react,
-                modifier = Modifier.align(Alignment.End),
-            )
-        }
         val usage = message.usage?.takeIf { settings.showUsage && !message.streaming }
         val actionable = !message.streaming && text.isNotBlank()
         // A reply of only code or files has nothing to say.
         val speakable = if (actionable) remember(text) { readAloudText(text).isNotEmpty() } else false
-        if (isDesktop && (actionable || usage != null)) {
+        val actions = if (actionable) listOfNotNull(
+            onBranch?.let { RowMenuItem(branchLabel, Lucide.GitBranch, run = it) },
+            onRegenerate?.let { RowMenuItem(regenerateLabel, Lucide.RefreshCw, run = it) },
+            when {
+                reading -> RowMenuItem(stopReadingLabel, Lucide.Square, run = onStopReading)
+                speakable && onReadAloud != null -> RowMenuItem(readAloudLabel, Lucide.Volume2) { onReadAloud(text) }
+                else -> null
+            },
+        ) else emptyList()
+        val showMore = reaction != null || react != null || actions.isNotEmpty()
+        if (isDesktop && (actionable || usage != null || showMore)) {
             // A desktop reads a reply's tools from its own start, as desktop chat apps line them up, and shows
             // them on the newest reply and under the pointer: older replies read without a row of icons each. They
             // only fade, so nothing moves as the pointer passes; one with the keyboard in it stays shown.
             var keysInside by remember { mutableStateOf(false) }
             val shown = last || hovered || keysInside
             val alpha by animateFloatAsState(if (shown) 1f else 0f, label = "reply actions")
+            val actionVisibility = Modifier.alpha(alpha)
             Row(
-                Modifier.trimEndTop(end = 0.dp, top = 4.dp).offset(x = (-10).dp).alpha(alpha).onFocusChanged { keysInside = it.hasFocus },
+                Modifier.trimEndTop(end = 0.dp, top = 4.dp).offset(x = (-10).dp)
+                    .onFocusChanged { keysInside = it.hasFocus }.focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (actionable) {
-                    // Pointer-sized, as the icons beside it are.
-                    CopyButton(text, Modifier.size(32.dp))
-                    onRegenerate?.let { ReplyAction(Lucide.RefreshCw, regenerateLabel, it, Modifier) }
-                    onBranch?.let { ReplyAction(Lucide.GitBranch, branchLabel, it, Modifier) }
+                if (actionable) CopyButton(text, modifier = actionVisibility, visibleLabel = copyLabel)
+                if (showMore) {
+                    ReplyReactionMenu(
+                        reaction = reaction,
+                        onReact = react,
+                        actions = actions,
+                        showLabel = true,
+                        buttonModifier = actionVisibility,
+                    )
                 }
                 usage?.let {
                     val spoken = stringResource(Res.string.chat_reply_tokens_spoken, compactCount(it.input), compactCount(it.output))
@@ -2940,7 +2950,8 @@ internal fun AssistantReply(
                         // On one line in a narrow window at the largest text, as on the phone.
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = spoken },
+                        modifier = Modifier.weight(1f, fill = false).padding(start = 8.dp).then(actionVisibility)
+                            .semantics { contentDescription = spoken },
                     )
                 }
             }
@@ -2963,16 +2974,7 @@ internal fun AssistantReply(
                 if (actionable) {
                     CopyButton(text, visibleLabel = copyLabel)
                 }
-                val actions = if (actionable) listOfNotNull(
-                    onBranch?.let { RowMenuItem(branchLabel, Lucide.GitBranch, run = it) },
-                    onRegenerate?.let { RowMenuItem(regenerateLabel, Lucide.RefreshCw, run = it) },
-                    when {
-                        reading -> RowMenuItem(stopReadingLabel, Lucide.Square, run = onStopReading)
-                        speakable && onReadAloud != null -> RowMenuItem(readAloudLabel, Lucide.Volume2) { onReadAloud(text) }
-                        else -> null
-                    },
-                ) else emptyList()
-                if (reaction != null || react != null || actions.isNotEmpty()) {
+                if (showMore) {
                     ReplyReactionMenu(
                         reaction = reaction,
                         onReact = react,
