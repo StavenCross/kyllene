@@ -45,13 +45,16 @@ class FoldDrawerTest {
             }
         }
 
-        onNodeWithText("Inbox").assertDoesNotExist()
+        onNodeWithText("Inbox").assertIsDisplayed().performClick()
+        runOnIdle { assertEquals("inbox", opened) }
+        onNodeWithText("Scheduled").assertDoesNotExist()
         onNodeWithText("Tools").performClick()
         onNodeWithText("Inbox").assertIsDisplayed()
         onNodeWithText("Scheduled").performClick()
         runOnIdle { assertEquals("scheduled", opened); mode = SidebarMode.Bots }
         onNodeWithText("Tools").assertIsDisplayed()
         onNodeWithText("Inbox").assertIsDisplayed().performClick()
+        runOnIdle { assertEquals("inbox", opened) }
         onNodeWithText("Scheduled").assertDoesNotExist()
         onNodeWithText("More").assertDoesNotExist()
         onNodeWithText("Tools").performClick()

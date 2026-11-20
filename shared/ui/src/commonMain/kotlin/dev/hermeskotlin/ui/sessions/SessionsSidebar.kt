@@ -1762,7 +1762,7 @@ private fun NavGrid(links: List<NavLink>, inset: Dp = 6.dp) {
 @Composable
 internal fun DrawerNavigation(mode: SidebarMode, links: List<NavLink>) {
     var expanded by rememberSaveable(mode) { mutableStateOf(false) }
-    val inbox = links.firstOrNull { mode == SidebarMode.Bots && it.icon == Lucide.Inbox }
+    val inbox = links.firstOrNull { it.icon == Lucide.Inbox }
     val tools = if (inbox == null) links else links.filter { it !== inbox }
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
         inbox?.let { NavTile(it, Modifier.fillMaxWidth(), compact = true) }
