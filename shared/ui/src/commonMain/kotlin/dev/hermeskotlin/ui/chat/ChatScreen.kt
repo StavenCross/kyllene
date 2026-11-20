@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.foundation.layout.width
 import org.koin.compose.koinInject
 import com.composables.icons.lucide.File
@@ -280,6 +279,7 @@ import dev.hermeskotlin.core.chat.ChatMessage
 import dev.hermeskotlin.core.chat.TranscriptEvent
 import dev.hermeskotlin.core.chat.replyTextOrNull
 import dev.hermeskotlin.core.chat.GatewayNotice
+import dev.hermeskotlin.core.chat.SubagentTranscriptPage
 import dev.hermeskotlin.core.chat.ChatState
 import dev.hermeskotlin.core.chat.OutgoingAttachment
 import dev.hermeskotlin.core.chat.SendCheck
@@ -349,6 +349,7 @@ import dev.hermeskotlin.designsystem.components.ButtonSize
 import dev.hermeskotlin.designsystem.components.ButtonVariant
 import dev.hermeskotlin.designsystem.components.MinTouchTarget
 import dev.hermeskotlin.designsystem.components.CopyButton
+import dev.hermeskotlin.designsystem.components.BottomSheet
 import dev.hermeskotlin.designsystem.components.Dialog
 import dev.hermeskotlin.designsystem.components.DropdownMenu
 import dev.hermeskotlin.designsystem.components.IconButton
@@ -631,6 +632,10 @@ fun ChatScreen(
         placeholder = stringResource(remember(target.copy(cwd = null, draft = null)) { (if (target.storedSessionId == null) NEW_CHAT_PROMPTS else FOLLOW_UP_PROMPTS).random() }),
         notice = notice,
         actions = viewModel,
+        subagentRailWidth = (paneWidth * 0.44f).coerceIn(200.dp, 520.dp).coerceAtMost(paneWidth * 0.62f),
+        loadSubagentTranscript = { id, cursor ->
+            if (ownsTranscript) viewModel.loadSubagentTranscript(target, id, cursor) else null
+        },
         widgetFiles = transcript.widgetFiles,
         editing = viewModel.editing.collectAsStateWithLifecycle().value,
         // Only for the chat it was taken for, not one the screen moved on to (a branch, a fresh start).
@@ -843,7 +848,46 @@ internal fun ChatView(
     attachmentPicker: AttachmentPicker? = null,
     /** A panel at the right, beside the conversation: the desktop's file rail. */
     rail: (@Composable () -> Unit)? = null,
+    subagentRailWidth: Dp = RAIL_WIDTH,
+    loadSubagentTranscript: suspend (String, String?) -> SubagentTranscriptPage? = { _, _ -> null },
 ) {
+    var delegationIds by rememberSaveable(conversationKey) { mutableStateOf<ArrayList<String>?>(null) }
+    fun closeSubagents() { delegationIds = null }
+    val subagents = remember(state.messages, state.subagents) {
+        if (state.subagents.isEmpty()) state.subagents else {
+            val owners = state.messages.asSequence().filterIsInstance<ChatMessage.Assistant>()
+                .flatMap { it.tools.asSequence() }.filter { it.name == "delegate_task" }
+                .flatMap { call -> call.tasks.mapNotNull { task -> task.transcriptId?.let { it to call.id } } }
+                .toMap()
+            state.subagents.map { child -> owners[child.id]?.let { child.copy(toolId = it) } ?: child }
+        }
+    }
+    val inspectedCalls = remember(delegationIds, state.messages) {
+        val ids = delegationIds ?: return@remember emptyList()
+        state.messages.asSequence().filterIsInstance<ChatMessage.Assistant>()
+            .map { reply -> reply.tools.filter { it.name == "delegate_task" } }
+            .firstOrNull { calls -> calls.any { it.id in ids } }.orEmpty()
+    }
+    val subagentInspector: (@Composable () -> Unit)? = delegationIds?.let { ids ->
+        {
+            key(ids) {
+                SubagentInspector(
+                    calls = inspectedCalls,
+                    subagents = subagents,
+                    runtimeId = state.runtimeSessionId.takeIf { connected },
+                    load = loadSubagentTranscript,
+                    onStop = actions::stopSubagent,
+                    onDismiss = ::closeSubagents,
+                    modifier = if (isDesktop) Modifier.fillMaxSize() else Modifier.fillMaxHeight(0.88f),
+                )
+            }
+        }
+    }
+    val desktopRail = if (isDesktop) subagentInspector ?: rail else rail
+    val railWidth = if (isDesktop && subagentInspector != null) subagentRailWidth else RAIL_WIDTH
+    if (!isDesktop) {
+        BottomSheet(visible = subagentInspector != null, onDismiss = ::closeSubagents) { subagentInspector?.invoke() }
+    }
     val mobileConnectionBanner = !isDesktop && linkStatus != null
     val controlHaze = if (isDesktop) null else rememberHazeState()
     var lastLinkStatus by remember { mutableStateOf("") }
@@ -894,19 +938,19 @@ internal fun ChatView(
             if (state.historyLoaded && state.messages.none { it.key == key }) actions.stopReading()
         }
         // The rail takes the right of the screen; the conversation centres in what's left.
-        if (rail != null) {
+        if (desktopRail != null) {
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
-                    .width(RAIL_WIDTH)
+                    .width(railWidth)
                     .fillMaxHeight()
                     .background(Theme[colors][background])
                     .border(1.dp, Theme[colors][stroke]),
-            ) { rail() }
+            ) { desktopRail() }
         }
         Column(
             Modifier
-                .padding(end = if (rail != null) RAIL_WIDTH else 0.dp)
+                .padding(end = if (desktopRail != null) railWidth else 0.dp)
                 // A desktop window's chat takes its whole width, so the bar's buttons sit at its edges and the
                 // scrollbar and the wheel work at the window's side; the reading column inside keeps to READING_WIDTH.
                 .then(if (isDesktop) Modifier else Modifier.widthIn(max = READING_WIDTH))
@@ -1117,7 +1161,9 @@ internal fun ChatView(
                             LocalOpenImage provides onViewImage,
                             LocalFileLinks provides { link -> GatewayFile.fromLink(link)?.let(onOpenFile) },
                             LocalNotice provides onNotice,
-                            LocalSubagents provides SubagentContext(state.subagents, actions::stopSubagent),
+                            LocalSubagents provides SubagentContext(subagents) { calls ->
+                                delegationIds = ArrayList(calls.map { it.id })
+                            },
                             LocalAgentScreenChat provides state.storedSessionId,
                             LocalScreenViews provides LocalAgentScreens.current.let { screens ->
                                 // Worked out again when a tool call changes, not on every token of a reply.
@@ -2991,7 +3037,7 @@ internal fun AssistantReply(
         if (showTools) if (message.streaming) LiveSteps(listedTools, message.key) else Tools(listedTools, message.key)
         if (generated.isNotEmpty()) ReplyMediaList(remember(generated) { generated.map { it.asMedia() } }, message.key)
         // Shown whatever the tool-activity setting: the work happens out of sight, in other agents.
-        message.tools.filter { it.name == "delegate_task" }.forEach { DelegationCard(it) }
+        DelegationChip(message.tools.filter { it.name == "delegate_task" })
         // Messages to other bots, said whatever the tool-activity setting: they're part of the conversation.
         message.tools.filter { it.name == MESSAGE_AGENT_TOOL }.forEach { MessagedLine(it) }
         if (text.isNotBlank()) {

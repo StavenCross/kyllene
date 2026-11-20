@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -51,11 +50,8 @@ import com.composeunstyled.Text
 import com.composeunstyled.UnstyledIcon
 import com.composeunstyled.theme.Theme
 import dev.hermeskotlin.designsystem.rememberHoverIndication
-import dev.hermeskotlin.core.chat.Subagent
 import dev.hermeskotlin.core.chat.SubagentRow
 import dev.hermeskotlin.core.chat.SubagentStatus
-import dev.hermeskotlin.core.chat.ToolActivity
-import dev.hermeskotlin.core.chat.subagentRows
 import dev.hermeskotlin.core.models.displayModelName
 import dev.hermeskotlin.designsystem.accentSoft
 import dev.hermeskotlin.designsystem.accentText
@@ -88,28 +84,6 @@ import dev.hermeskotlin.ui.resources.*
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-
-/** The chat's subagents and a way to stop one, for the delegation cards in its replies. */
-internal class SubagentContext(val subagents: List<Subagent>, val onStop: (String) -> Unit)
-
-internal val LocalSubagents = compositionLocalOf { SubagentContext(emptyList()) {} }
-
-/**
- * A `delegate_task` call as the agents it started: one card per task with what it's doing now, and
- * any subagents it started in turn nested beneath. Tap a card for its full activity and result.
- */
-@Composable
-internal fun DelegationCard(call: ToolActivity) {
-    val context = LocalSubagents.current
-    val rows = remember(call, context.subagents) { subagentRows(call, context.subagents) }
-    if (rows.isEmpty()) return
-    // A little more room than the glow's spread would like, so a live card's glow doesn't wash over the next.
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        rows.forEach { row ->
-            key(row.key) { SubagentCard(row, context.onStop) }
-        }
-    }
-}
 
 /** A surface card; a live one has an accent edge and a soft accent glow, a finished one a hairline. */
 @Composable
@@ -188,7 +162,7 @@ private fun SubagentRowView(row: SubagentRow, onStop: ((String) -> Unit)?) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            meta(row).takeIf { it.isNotEmpty() }?.let {
+            subagentMeta(row).takeIf { it.isNotEmpty() }?.let {
                 Text(
                     it,
                     style = Theme[typography][code].copy(fontSize = 11.5.sp, lineHeight = 16.sp),
@@ -251,7 +225,7 @@ private fun SubagentRowView(row: SubagentRow, onStop: ((String) -> Unit)?) {
 
 /** A 24dp disc saying where it stands: a spinner while it runs, a check when done, a cross when it failed. */
 @Composable
-private fun StatusDisc(status: SubagentStatus) {
+internal fun StatusDisc(status: SubagentStatus, announce: Boolean = true) {
     val (fill, tint) = when (status) {
         SubagentStatus.Running -> Theme[colors][accentSoft] to Theme[colors][accentText]
         SubagentStatus.Done -> Theme[colors][successSoft] to Theme[colors][success]
@@ -262,7 +236,7 @@ private fun StatusDisc(status: SubagentStatus) {
     val said = stringResource(saidRes)
     Box(
         // Clears the spinner's own "Loading", so the disc says its state once.
-        Modifier.size(24.dp).background(fill, CircleShape).clearAndSetSemantics { contentDescription = said },
+        Modifier.size(24.dp).background(fill, CircleShape).clearAndSetSemantics { if (announce) contentDescription = said },
         contentAlignment = Alignment.Center,
     ) {
         if (icon == null) Spinner(Modifier.size(12.dp), color = tint)
@@ -271,7 +245,7 @@ private fun StatusDisc(status: SubagentStatus) {
 }
 
 /** The disc's icon (null for the spinner) and what it says aloud. */
-private fun statusIcon(status: SubagentStatus): Pair<ImageVector?, StringResource> = when (status) {
+internal fun statusIcon(status: SubagentStatus): Pair<ImageVector?, StringResource> = when (status) {
     SubagentStatus.Running -> null to Res.string.chat_subagent_running
     SubagentStatus.Queued -> Lucide.Clock to Res.string.chat_subagent_waiting
     SubagentStatus.Done -> Lucide.Check to Res.string.chat_subagent_done
@@ -283,7 +257,7 @@ private fun statusIcon(status: SubagentStatus): Pair<ImageVector?, StringResourc
 
 /** A 30dp round stop in a full-size touch target. */
 @Composable
-private fun StopButton(onClick: () -> Unit) = Tooltip(stringResource(Res.string.chat_subagent_stop)) {
+internal fun StopButton(onClick: () -> Unit) = Tooltip(stringResource(Res.string.chat_subagent_stop)) {
     val interaction = remember { MutableInteractionSource() }
     val label = stringResource(Res.string.chat_subagent_stop)
     Box(
@@ -309,9 +283,9 @@ private fun StopButton(onClick: () -> Unit) = Tooltip(stringResource(Res.string.
 
 /** "model · 12s · 5 tools", whichever are known. */
 @Composable
-private fun meta(row: SubagentRow): String = listOfNotNull(
+internal fun subagentMeta(row: SubagentRow, includeStatus: Boolean = true): String = listOfNotNull(
     row.model?.let(::displayModelName),
-    when (row.status) {
+    when (row.status.takeIf { includeStatus }) {
         SubagentStatus.Queued -> stringResource(Res.string.chat_subagent_waiting)
         SubagentStatus.Interrupted -> stringResource(Res.string.chat_process_stopped)
         SubagentStatus.Unwatched -> stringResource(Res.string.chat_subagent_in_background)
