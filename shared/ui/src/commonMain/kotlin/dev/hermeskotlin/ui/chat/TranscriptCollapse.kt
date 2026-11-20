@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import androidx.compose.ui.draw.clip
 import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.hazeBlur
@@ -68,7 +69,7 @@ import dev.hermeskotlin.designsystem.components.ButtonSize
 import dev.hermeskotlin.designsystem.components.ButtonVariant
 import dev.hermeskotlin.designsystem.components.MinTouchTarget
 
-internal val TranscriptControlRim = 6.dp
+internal val TranscriptControlRim = 12.dp
 
 internal val LocalTranscriptCollapse = staticCompositionLocalOf<TranscriptCollapseState?> { null }
 
@@ -115,7 +116,7 @@ internal fun TranscriptCollapseHost(
                 val rim = if (controlHaze == null) 0.dp else TranscriptControlRim
                 TranscriptControlBackdrop(
                     CircleShape, controlHaze,
-                    Modifier.align(Alignment.BottomCenter).padding(start = 16.dp - rim, end = 16.dp - rim, bottom = bottomInset + 8.dp - rim),
+                    Modifier.align(Alignment.BottomCenter).padding(start = 16.dp - rim, end = 16.dp - rim, bottom = (bottomInset + 8.dp - rim).coerceAtLeast(0.dp)),
                 ) {
                     Button(
                         target.label,
@@ -167,11 +168,13 @@ internal fun TranscriptControlBackdrop(
             val density = LocalDensity.current
             val direction = LocalLayoutDirection.current
             val style = remember(page, shape, density, direction) {
+                val feather = featheredRimBrush(shape, density, direction)
                 HazeBlurStyle {
                     blurEnabled(true)
                     blurRadius(12.dp)
                     backgroundColor(page)
-                    mask(featheredRimMask(shape, density, direction))
+                    progressive(HazeProgressive.Brush(feather))
+                    mask(feather)
                 }
             }
             Box(Modifier.matchParentSize().clip(shape).hazeBlur(input = HazeInput.Sources(haze), style = style))
@@ -183,14 +186,15 @@ internal fun TranscriptControlBackdrop(
 }
 
 /** The blur fades smoothly from full at the button edge to transparent at the rim's outside. */
-private fun featheredRimMask(shape: Shape, density: Density, direction: LayoutDirection) = object : ShaderBrush() {
+private fun featheredRimBrush(shape: Shape, density: Density, direction: LayoutDirection) = object : ShaderBrush() {
     override fun createShader(size: Size): Shader {
         val bitmap = ImageBitmap(ceil(size.width).toInt().coerceAtLeast(1), ceil(size.height).toInt().coerceAtLeast(1))
         val canvas = Canvas(bitmap)
         val paint = Paint()
-        val outline = shape.createOutline(size, direction, density)
-        val outer = (outline as? Outline.Rounded)?.roundRect ?: RoundRect(Rect(Offset.Zero, size), CornerRadius.Zero)
         val feather = with(density) { TranscriptControlRim.toPx() }.coerceAtMost(size.minDimension / 2)
+        val innerSize = Size(size.width - 2 * feather, size.height - 2 * feather)
+        val outline = shape.createOutline(innerSize, direction, density)
+        val button = (outline as? Outline.Rounded)?.roundRect ?: RoundRect(Rect(Offset.Zero, innerSize), CornerRadius.Zero)
         val steps = ceil(feather).toInt().coerceAtLeast(1)
         var previousAlpha = 0f
         for (step in 1..steps) {
@@ -199,12 +203,14 @@ private fun featheredRimMask(shape: Shape, density: Density, direction: LayoutDi
             val alpha = t * t * (3 - 2 * t)
             // Each inset fill is composited over the previous fill, which already has some alpha.
             paint.color = Color.White.copy(alpha = ((alpha - previousAlpha) / (1 - previousAlpha)).coerceIn(0f, 1f))
-            fun CornerRadius.inset() = CornerRadius((x - inset).coerceAtLeast(0f), (y - inset).coerceAtLeast(0f))
+            // Expand each corner from the button's edge, so the feather follows the button's outline.
+            val spread = feather - inset
+            fun CornerRadius.outset() = CornerRadius(x + spread, y + spread)
             canvas.drawOutline(
                 Outline.Rounded(RoundRect(
-                    outer.left + inset, outer.top + inset, outer.right - inset, outer.bottom - inset,
-                    outer.topLeftCornerRadius.inset(), outer.topRightCornerRadius.inset(),
-                    outer.bottomRightCornerRadius.inset(), outer.bottomLeftCornerRadius.inset(),
+                    inset, inset, size.width - inset, size.height - inset,
+                    button.topLeftCornerRadius.outset(), button.topRightCornerRadius.outset(),
+                    button.bottomRightCornerRadius.outset(), button.bottomLeftCornerRadius.outset(),
                 )),
                 paint,
             )
