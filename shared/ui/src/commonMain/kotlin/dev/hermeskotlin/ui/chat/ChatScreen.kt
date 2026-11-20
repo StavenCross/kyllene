@@ -845,6 +845,7 @@ internal fun ChatView(
     rail: (@Composable () -> Unit)? = null,
 ) {
     val mobileConnectionBanner = !isDesktop && linkStatus != null
+    val controlHaze = if (isDesktop) null else rememberHazeState()
     var lastLinkStatus by remember { mutableStateOf("") }
     if (linkStatus != null) lastLinkStatus = linkStatus
     val reconnectBanner: @Composable () -> Unit = {
@@ -852,9 +853,8 @@ internal fun ChatView(
             visible = linkStatus != null,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = if (isDesktop) Modifier else Modifier.padding(bottom = 6.dp),
         ) {
-            OfflineBanner(place, lastLinkStatus, onRetry = onRetryConnection)
+            OfflineBanner(place, lastLinkStatus, onRetry = onRetryConnection, controlHaze = controlHaze)
         }
     }
     val canAttach = attachmentPicker != null && connected && attachments.size < OutgoingAttachment.MAX_COUNT
@@ -1141,6 +1141,7 @@ internal fun ChatView(
                                     savedCopy = state.savedCopyAt != null,
                                     bottomInset = listInset,
                                     controlsInset = dockInset,
+                                    controlHaze = controlHaze,
                                     fold = composerFold,
                                     actions = actions,
                                     connected = connected,
@@ -1219,54 +1220,57 @@ internal fun ChatView(
                         StatusPill(stringResource(Res.string.chat_loading_older))
                     }
                 }
-                Box(
+                Column(
                     Modifier
                         .then(if (isDesktop) Modifier.align(Alignment.TopCenter).offset { IntOffset(0, dockTop.roundToInt()) } else Modifier.align(Alignment.BottomCenter))
                         .widthIn(max = READING_WIDTH)
                         .fillMaxWidth()
                         .onSizeChanged { dockHeight = it.height },
                 ) {
-                    // Measure with the dock so the gap stays covered throughout the collapse animation.
-                    Box(Modifier.matchParentSize().hazeSource(hazeState).background(Theme[colors][background].copy(alpha = 1f)))
-                    Column {
-                        Dock(
-                            hazeState = hazeState,
-                            actions = actions,
-                            placeholder = placeholder,
-                            state = state,
-                            picker = picker,
-                            connected = connected,
-                            connectionInBanner = mobileConnectionBanner,
-                            offlineBanner = reconnectBanner.takeUnless { isDesktop },
-                            attachments = attachments,
-                            attachmentError = attachmentError,
-                            voiceChat = voiceChat,
-                            dictation = dictation,
-                            readAloud = readAloud,
-                            suggestions = suggestions,
-                            suggestedReply = suggestedReply,
-                            mentions = mentions,
-                            onMention = onMention,
-                            refs = refs,
-                            onRef = onRef,
-                            notice = notice,
-                            editing = editing != null,
-                            comments = comments,
-                            focusComment = focusComment,
-                            onCommentFocused = { focusComment = null },
-                            composerFocus = composerFocus,
-                            composerFold = composerFold,
-                            onComposerShrink = { composerShrink = it },
-                            onListsHeight = { listsHeight = it },
-                            onOpenModels = onOpenModels,
-                            onAttach = onAttach,
-                            onDictate = onDictate,
-                            onVoiceChat = onVoiceChat,
-                            onOpenControl = onOpenControl,
-                            voiceFull = voiceFull,
-                            onExpandVoice = { voiceFolded = false },
-                            onPasteFiles = { canAttach && keysEnabled && attachmentPicker?.pasteAttachments() == true },
-                        )
+                    val backdrop = Theme[colors][background].copy(alpha = 1f)
+                    Column(Modifier.fillMaxWidth().background(if (mobileConnectionBanner) Color.Transparent else backdrop)) {
+                        DockNotices(state, actions, attachmentError, voiceChat, dictation, readAloud, notice)
+                    }
+                    if (!isDesktop) reconnectBanner()
+                    Box(Modifier.fillMaxWidth()) {
+                        // Only the plan and composer dock has a continuous backdrop when the banner is showing.
+                        Box(Modifier.matchParentSize().hazeSource(hazeState).background(backdrop))
+                        Column {
+                            Dock(
+                                hazeState = hazeState,
+                                actions = actions,
+                                placeholder = placeholder,
+                                state = state,
+                                picker = picker,
+                                connected = connected,
+                                connectionInBanner = mobileConnectionBanner,
+                                attachments = attachments,
+                                voiceChat = voiceChat,
+                                dictation = dictation,
+                                suggestions = suggestions,
+                                suggestedReply = suggestedReply,
+                                mentions = mentions,
+                                onMention = onMention,
+                                refs = refs,
+                                onRef = onRef,
+                                editing = editing != null,
+                                comments = comments,
+                                focusComment = focusComment,
+                                onCommentFocused = { focusComment = null },
+                                composerFocus = composerFocus,
+                                composerFold = composerFold,
+                                onComposerShrink = { composerShrink = it },
+                                onListsHeight = { listsHeight = it },
+                                onOpenModels = onOpenModels,
+                                onAttach = onAttach,
+                                onDictate = onDictate,
+                                onVoiceChat = onVoiceChat,
+                                onOpenControl = onOpenControl,
+                                voiceFull = voiceFull,
+                                onExpandVoice = { voiceFolded = false },
+                                onPasteFiles = { canAttach && keysEnabled && attachmentPicker?.pasteAttachments() == true },
+                            )
+                        }
                     }
                 }
                 // The pet sits on the composer's top edge, over the conversation rather than in the dock's height.
@@ -1344,49 +1348,16 @@ private fun DropOverlay() {
     }
 }
 
-/** What floats at the bottom of the chat: banners, the live status, and the composer or the agent's question. */
+/** Notices sit above the Android reconnect banner when the gateway is offline. */
 @Composable
-private fun ColumnScope.Dock(
-    hazeState: HazeState,
-    actions: ChatActions,
-    placeholder: String,
+private fun DockNotices(
     state: ChatState,
-    picker: ModelPickerState,
-    connected: Boolean,
-    connectionInBanner: Boolean,
-    offlineBanner: (@Composable () -> Unit)?,
-    attachments: List<OutgoingAttachment>,
+    actions: ChatActions,
     attachmentError: String?,
     voiceChat: VoiceChatState,
     dictation: DictationState,
     readAloud: ReadAloudState,
-    suggestions: List<SlashSuggestion>,
-    suggestedReply: SuggestedReply?,
-    mentions: List<Bot>,
-    onMention: (Bot) -> Unit,
-    refs: List<RefChoice>,
-    onRef: (RefChoice) -> Unit,
     notice: String?,
-    editing: Boolean,
-    comments: List<PendingComment>,
-    focusComment: Long?,
-    onCommentFocused: () -> Unit,
-    composerFocus: FocusRequester,
-    composerFold: ComposerFold,
-    onComposerShrink: (Int) -> Unit,
-    /** How tall the `/` and `@` lists over the composer stand, as they open and fade out. */
-    onListsHeight: (Int) -> Unit = {},
-    onOpenModels: () -> Unit,
-    onAttach: () -> Unit,
-    onDictate: () -> Unit,
-    onVoiceChat: () -> Unit,
-    /** Opens the goal and loops sheet from the strip above the composer. */
-    onOpenControl: () -> Unit,
-    /** The voice chat is open over the whole screen. */
-    voiceFull: Boolean,
-    onExpandVoice: () -> Unit,
-    /** A paste in the composer: true when it attached files, a picture or a long text (the desktop's). */
-    onPasteFiles: () -> Boolean = { false },
 ) {
     (state.attachment as? Attachment.Failed)?.let {
         Banner(it.message, actionLabel = stringResource(Res.string.chat_retry), onAction = actions::retry)
@@ -1409,6 +1380,48 @@ private fun ColumnScope.Dock(
     dictation.error?.let { Banner(briefError(it), actionLabel = null, onAction = actions::dismissDictationError) }
     readAloud.error?.let { Banner(briefError(it), actionLabel = null, onAction = actions::dismissReadAloudError) }
     AnimatedVisibility(visible = notice != null) { NoticeLine(notice.orEmpty()) }
+}
+
+/** The bottom dock holds the plan and the composer or the agent's question. */
+@Composable
+private fun ColumnScope.Dock(
+    hazeState: HazeState,
+    actions: ChatActions,
+    placeholder: String,
+    state: ChatState,
+    picker: ModelPickerState,
+    connected: Boolean,
+    connectionInBanner: Boolean,
+    attachments: List<OutgoingAttachment>,
+    voiceChat: VoiceChatState,
+    dictation: DictationState,
+    suggestions: List<SlashSuggestion>,
+    suggestedReply: SuggestedReply?,
+    mentions: List<Bot>,
+    onMention: (Bot) -> Unit,
+    refs: List<RefChoice>,
+    onRef: (RefChoice) -> Unit,
+    editing: Boolean,
+    comments: List<PendingComment>,
+    focusComment: Long?,
+    onCommentFocused: () -> Unit,
+    composerFocus: FocusRequester,
+    composerFold: ComposerFold,
+    onComposerShrink: (Int) -> Unit,
+    /** How tall the `/` and `@` lists over the composer stand, as they open and fade out. */
+    onListsHeight: (Int) -> Unit = {},
+    onOpenModels: () -> Unit,
+    onAttach: () -> Unit,
+    onDictate: () -> Unit,
+    onVoiceChat: () -> Unit,
+    /** Opens the goal and loops sheet from the strip above the composer. */
+    onOpenControl: () -> Unit,
+    /** The voice chat is open over the whole screen. */
+    voiceFull: Boolean,
+    onExpandVoice: () -> Unit,
+    /** A paste in the composer: true when it attached files, a picture or a long text (the desktop's). */
+    onPasteFiles: () -> Boolean = { false },
+) {
     // One place says what's happening: the current action, with the status text and plan folded beneath.
     AnimatedVisibility(visible = state.running, enter = fadeIn(), exit = fadeOut()) {
         ProgressPanel(
@@ -1429,7 +1442,6 @@ private fun ColumnScope.Dock(
     if (state.inputRequests.isNotEmpty()) {
         // The task's Stop is on the live task card above.
         InputRequestPanel(state.inputRequests, connected, onAnswer = actions::answer, onStop = null)
-        offlineBanner?.invoke()
     } else if (voiceChat.phase != VoicePhase.Off) {
         // Full screen, the voice screen has these; the panel would only animate unseen beneath it.
         if (!voiceFull) {
@@ -1443,7 +1455,6 @@ private fun ColumnScope.Dock(
                 onSendNow = actions::sendVoiceNow,
             )
         }
-        offlineBanner?.invoke()
     } else {
         // Escape puts a desktop's open list away, as a menu's does, until the typing changes; the chat's own Escape
         // (stopping a task) waits for the next press.
@@ -1525,8 +1536,6 @@ private fun ColumnScope.Dock(
                 icon = Lucide.Pencil,
             )
         }
-        // The dock's measured height keeps the transcript buttons above the reconnect banner as it folds.
-        offlineBanner?.invoke()
         Composer(
             editing = editing,
             hazeState = hazeState,
@@ -1931,6 +1940,7 @@ private fun Messages(
     bottomInset: Dp,
     /** How high the dock really stands, for what floats just above it. */
     controlsInset: Dp,
+    controlHaze: HazeState?,
     /** Folds the composer by how near the reader is to the end. */
     fold: ComposerFold,
     actions: ChatActions,
@@ -2119,7 +2129,6 @@ private fun Messages(
     }
     val unservable = remember(messages) { unservableEchoes(messages) }
     val unreadLine = remember(messages, unreadFrom, readUpTo) { unreadLineKey(messages, unreadFrom, readUpTo) }
-    val controlHaze = if (isDesktop) null else rememberHazeState()
     TranscriptCollapseHost(bottomInset = controlsInset, state = collapse, controlHaze = controlHaze) {
     BoxWithConstraints(Modifier.fillMaxSize().pointerInput(readUpTo) {
         awaitPointerEventScope {
@@ -2443,31 +2452,34 @@ private const val UNREACHABLE = "Can't reach gateway"
 
 /** The banner over the chat while the gateway can't be reached: where, what's being done about it, and Retry now. */
 @Composable
-internal fun OfflineBanner(place: String?, status: String, onRetry: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            // The tint laid on the chat's page colour: the red wash it had on a plain page, but nothing under it shows through.
-            .background(Theme[colors][dangerSoft].compositeOver(Theme[colors][background]), RoundedCornerShape(Theme[radii][radiusMedium]))
-            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
-            .semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        UnstyledIcon(Lucide.WifiOff, contentDescription = null, tint = Theme[colors][danger], modifier = Modifier.size(16.dp))
-        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-            // Announced once as it appears: the line under it changes with every attempt, and isn't.
-            Text(
-                stringResource(Res.string.chat_offline_title, offlineTitle(place)),
-                style = Theme[typography][bodySmall].copy(fontWeight = FontWeight.Medium),
-                color = Theme[colors][textColor],
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            )
-            val line = stringResource(Res.string.chat_offline_draft_kept, status)
-            CopyableOnDesktop { Text(line, style = Theme[typography][caption], color = Theme[colors][textSecondary]) }
+internal fun OfflineBanner(place: String?, status: String, onRetry: () -> Unit, controlHaze: HazeState? = null) {
+    val shape = RoundedCornerShape(Theme[radii][radiusMedium])
+    val rim = if (controlHaze == null) 0.dp else TranscriptControlRim
+    TranscriptControlBackdrop(shape, controlHaze, Modifier.fillMaxWidth().padding(horizontal = 14.dp - rim)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                // Keep the banner itself opaque even as the nearby transcript softly fades out around it.
+                .background(Theme[colors][dangerSoft].compositeOver(Theme[colors][background]), shape)
+                .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+                .semantics(mergeDescendants = true) {},
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            UnstyledIcon(Lucide.WifiOff, contentDescription = null, tint = Theme[colors][danger], modifier = Modifier.size(16.dp))
+            Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                // Announced once as it appears: the line under it changes with every attempt, and isn't.
+                Text(
+                    stringResource(Res.string.chat_offline_title, offlineTitle(place)),
+                    style = Theme[typography][bodySmall].copy(fontWeight = FontWeight.Medium),
+                    color = Theme[colors][textColor],
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                val line = stringResource(Res.string.chat_offline_draft_kept, status)
+                CopyableOnDesktop { Text(line, style = Theme[typography][caption], color = Theme[colors][textSecondary]) }
+            }
+            RetryChip(stringResource(Res.string.chat_retry_now), onClick = onRetry)
         }
-        RetryChip(stringResource(Res.string.chat_retry_now), onClick = onRetry)
     }
 }
 
