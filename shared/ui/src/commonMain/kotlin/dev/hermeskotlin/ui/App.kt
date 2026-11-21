@@ -93,6 +93,8 @@ import dev.hermeskotlin.ui.gateways.GatewaysSheet
 import dev.hermeskotlin.ui.sessions.ArchiveUndoToast
 import dev.hermeskotlin.ui.sessions.ChatMenu
 import dev.hermeskotlin.ui.sessions.SessionsSidebar
+import dev.hermeskotlin.ui.sessions.ShownChats
+import dev.hermeskotlin.core.sessions.SessionSummary
 import dev.hermeskotlin.ui.settings.AppLockCover
 import dev.hermeskotlin.ui.settings.PhoneQuestion
 import dev.hermeskotlin.ui.settings.PhoneQuestionDialog
@@ -339,12 +341,23 @@ private fun Routes() {
     val shortcuts = LocalShortcuts.current
     val boundChat = remember { mutableStateOf<ChatViewModel?>(null) }
     var pendingReveal by remember { mutableStateOf<Shortcut.RevealChat?>(null) }
+    var pendingNotice by remember { mutableStateOf<Shortcut.RevealNotice?>(null) }
     fun revealChat() {
         gatewaysOpen = false
         app.cancelPendingCall()
     }
     ShortcutHandler { shortcut ->
-        if (shortcut is Shortcut.RevealChat) {
+        if (shortcut is Shortcut.RevealNotice) {
+            if (route is Route.Chat) return@ShortcutHandler false
+            if (!shortcut.current()) return@ShortcutHandler true
+            val source = shortcut.source
+            val target = source?.let { boundChat.value?.targetFor(it) }
+            if (source != null && target != null && app.returnToChat(source, target)) revealChat()
+            pendingReveal = null
+            pendingNotice = shortcut
+            true
+        } else if (shortcut is Shortcut.RevealChat) {
+            pendingNotice = null
             val target = boundChat.value?.targetFor(shortcut.source)
             if (shortcut.current() && target != null && (route as? Route.SignIn)?.adding == true) {
                 pendingReveal = shortcut
@@ -403,6 +416,15 @@ private fun Routes() {
             pendingReveal = null
         } else if (route is Route.Chat) {
             pendingReveal = null
+            shortcuts.fire(pending)
+        }
+    }
+
+    LaunchedEffect(route, pendingNotice) {
+        val pending = pendingNotice ?: return@LaunchedEffect
+        if (!pending.current()) pendingNotice = null
+        else if (route is Route.Chat) {
+            pendingNotice = null
             shortcuts.fire(pending)
         }
     }
@@ -591,11 +613,12 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
     var shownInboxLink by remember { mutableStateOf<InboxLink?>(null) }
     LaunchedEffect(inboxLink) {
         val link = inboxLink ?: return@LaunchedEffect
+        if (!link.current()) { inboxLinks.consume(link); return@LaunchedEffect }
         app.cancelPendingCall()
         try {
             sidebar.open()
         } finally {
-            shownInboxLink = link
+            if (link.current()) shownInboxLink = link else inboxLinks.consume(link)
         }
     }
     // A room asked for from outside the screens (a tapped notification) opens over the chat.
@@ -624,6 +647,12 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
     // the foreground; that keeps the gateway's live list polled then (every 10 s, as while the sidebar shows), and
     // never in the background.
     val sessions: SessionsViewModel = koinViewModel()
+    // The chats as the sidebar lists them: deleting the open chat, from there or its options, opens the one listed
+    // in its place, and a new chat only when none is left.
+    val shownChats = remember { ShownChats() }
+    val leaveDeleted: (next: SessionSummary?) -> Unit = { next ->
+        if (next != null) app.openSession(next.id, next.displayTitle, sessions.readUpTo(next)) else app.newChat()
+    }
     val profileRoster by sessions.roster.collectAsStateWithLifecycle()
     // The bot answering in the open chat, named above its replies. Only a launch profile the gateway named counts:
     // a guessed `default` could name the wrong bot. Equal unless what's drawn changed, so a roster refresh doesn't
@@ -712,6 +741,7 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
     val bus = LocalShortcuts.current
     val openModals = LocalOpenModals.current
     var pendingReveal by remember { mutableStateOf<Shortcut.RevealChat?>(null) }
+    var pendingNotice by remember { mutableStateOf<Shortcut.RevealNotice?>(null) }
     LaunchedEffect(pendingReveal, openModals.any, editing, pluginUrl) {
         val pending = pendingReveal ?: return@LaunchedEffect
         if (!pending.current()) {
@@ -721,6 +751,20 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
             settingsOpen = false
             menuOpen = false
             closeDrawerToChat()
+        }
+    }
+    LaunchedEffect(pendingNotice, openModals.any, editing, pluginUrl) {
+        val pending = pendingNotice ?: return@LaunchedEffect
+        if (!pending.current()) pendingNotice = null
+        else if (!openModals.any && editing == null && pluginUrl == null) {
+            pendingNotice = null
+            settingsOpen = false
+            menuOpen = false
+            closeDrawerToChat()
+            if (pending.current()) {
+                onRevealChat()
+                pending.open()
+            }
         }
     }
     ShortcutHandler { shortcut ->
@@ -740,7 +784,12 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
                 closeDrawerToChat()
             }
             Shortcut.Settings -> true.also { settingsOpen = true }
+            is Shortcut.RevealNotice -> true.also {
+                pendingReveal = null
+                if (shortcut.current()) pendingNotice = shortcut
+            }
             is Shortcut.RevealChat -> true.also {
+                pendingNotice = null
                 if (shortcut.current()) {
                     onRevealChat()
                     pendingReveal = shortcut
@@ -783,7 +832,7 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
                     app.newChat(cwd = project?.path?.takeIf { !project.isNoProject }, picked = project != null)
                     closeDrawerToChat()
                 },
-                onDeleted = { if (it.id == openSessionId) app.newChat() },
+                onDeleted = { deleted, next -> if (deleted.id == openSessionId) leaveDeleted(next) },
                 onSessionExpired = app::onSessionExpired,
                 onSignOut = app::signOut,
                 onOpenGateways = onOpenGateways,
@@ -837,6 +886,7 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
                     if (app.openReportChat(chat, launch = profileRoster?.takeIf { it.launchKnown }?.launch)) closeDrawerToChat()
                 },
                 mainPage = mainPage,
+                shownChats = shownChats,
             )
         },
     ) {
@@ -971,7 +1021,7 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
         messages = chatState.messages,
         onDismiss = { menuOpen = false },
         onRenamed = chat::showTitle,
-        onDeleted = app::newChat,
+        onDeleted = leaveDeleted,
         onUsage = chat::openUsage,
         onProcesses = chat::openProcesses,
         onCheckpoints = chat::openCheckpoints,
@@ -980,6 +1030,7 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
         botChat = route.target.bot != null,
         onStartFresh = openBot?.let { bot -> { startOver = bot } },
         onOpenChat = app::openSession,
+        shownChats = shownChats,
     )
     StartOverDialog(startOver, onDismiss = { startOver = null }) { bot ->
         bots.startFresh(bot) { id -> app.openBotChat(bot, id) }
