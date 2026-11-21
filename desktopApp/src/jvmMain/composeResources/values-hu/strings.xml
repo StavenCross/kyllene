@@ -51,4 +51,14 @@
     <string name="notice_push_working">A push értesítések működnek.</string>
     <string name="push_reconnecting">A push kapcsolat megszakadt. A Kyllene újrapróbálkozik, amíg fut.</string>
     <string name="push_replay_unavailable">A Kyllene nem tudta megnyitni a push újrajátszási állapotát. A meglévő adatok megmaradtak; újrapróbálkozás előtt állíts vissza egy biztosan működő biztonsági másolatot.</string>
+
+    <!-- Desktop startup. -->
+    <string name="startup_at_login">Indítás bejelentkezéskor</string>
+    <string name="startup_not_approved">Az automatikus indítási kérés nem lett jóváhagyva.</string>
+    <string name="startup_not_applied">Az asztali környezet nem alkalmazta az automatikus indítás módosítását.</string>
+    <string name="startup_shows_window">Az automatikus indítás ablakot fog megjeleníteni.</string>
+    <string name="startup_not_saved">Az asztali környezet frissítette az automatikus indítást; az alkalmazás beállítása nem lett mentve.</string>
+    <string name="startup_incomplete">Az automatikus indítási kérés nem fejeződött be.</string>
+    <string name="startup_enable_reason">A Kyllene indítása a tálcán bejelentkezéskor.</string>
+    <string name="startup_disable_reason">A Kyllene automatikus indításának leállítása bejelentkezéskor.</string>
 </resources>
