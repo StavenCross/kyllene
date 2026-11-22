@@ -156,8 +156,36 @@ class ChatSessionTest {
         assertEquals(emptyList<SubagentRow>(), chat.activeSubagents())
         assertTrue(chat.state.value.subagents.any { it.id == "child-1" })
 
-        gateway.answer = { "error:-32601" }
+        // An answer that fails says nothing about what runs.
+        gateway.answer = { "error:4001" }
         assertNull(chat.activeSubagents())
+
+        // An older gateway has no roster: the events this chat got are all there is, and it isn't asked again.
+        gateway.answer = { "error:-32601" }
+        assertEquals(listOf("child-1"), assertNotNull(chat.activeSubagents()).map { it.key })
+        gateway.answer = { """{"subagents":[]}""" }
+        assertEquals(listOf("child-1"), assertNotNull(chat.activeSubagents()).map { it.key })
+    }
+
+    @Test
+    fun anUnsupportedRosterDoesNotPreventReadingAChildTranscript() = runTest {
+        val (chat, transport) = resumedChat(backgroundScope, mapOf(
+            "subagent.list" to "error:-32601",
+            "session.transcript" to """{"session_id":"rt1","subagent_id":"child-1","available":true,"running":true,
+                "next_cursor":"next","rows":[{"row_id":1,"role":"assistant","text":"Child reply"}]}""",
+        ))
+
+        assertEquals(emptyList<SubagentRow>(), chat.activeSubagents())
+        val page = assertNotNull(chat.subagentTranscript("child-1", "previous"))
+
+        assertEquals("Child reply", page.rows.single().text)
+        assertEquals("next", page.nextCursor)
+        assertTrue(page.running)
+        val call = transport.awaitSent { it.isCall("session.transcript") }
+        assertEquals("rt1", call.param("session_id"))
+        assertEquals("child-1", call.param("subagent_id"))
+        assertEquals("previous", call.param("cursor"))
+        assertNull(chat.subagentTranscript("wrong-child", null))
     }
 
     @Test

@@ -119,7 +119,7 @@ internal fun followSystemAppearance(osName: String?) {
 }
 
 /** A chat in a window of its own; [raise] goes up when it's asked for again. */
-private data class PoppedChat(val target: ChatTarget, val key: Int, val raise: Int = 0, val ownerVersion: Long = 0, val raiseGuard: (() -> Boolean)? = null)
+private data class PoppedChat(val target: ChatTarget, val key: Int, val raise: Int = 0, val raiseGuard: (() -> Boolean)? = null)
 
 fun main(args: Array<String>) {
     followSystemAppearance(System.getProperty("os.name"))
@@ -353,21 +353,8 @@ fun main(args: Array<String>) {
         // Chats opened in windows of their own, each with its own key so closing one keeps the others' state.
         val chatWindows = remember { mutableStateListOf<PoppedChat>() }
         var nextWindow by remember { mutableStateOf(0) }
-        val post: (DesktopNotice) -> Unit = { notice ->
-            lastNotice = notice
-            // Windows' own notification where it can be had (it has buttons and stays in the Action Center);
-            // otherwise the tray's.
-            if (linuxNotices != null) linuxPost(notice, { host.session.value === notice.origin?.session }) { source, current ->
-                // Activate during this user action, before revealing its chat dismisses another page.
-                val mapped = frame?.takeIf { windowShown && it.isShowing && it.extendedState and Frame.ICONIFIED == 0 }
-                show(current)
-                if (mapped != null) {
-                    if (current()) LinuxWindowActivation.request(mapped)
-                }
-                shortcuts.fire(Shortcut.RevealChat(source, current))
-            }
-            else if (!WindowsToasts.show(notice, approveOnce, deny)) tray.sendNotification(Notification(notice.title, notice.body, Notification.Type.None))
-            // The taskbar button flashes (the Dock icon bounces once) until the user comes back.
+        // The taskbar button flashes (the Dock icon bounces once) until the user comes back.
+        fun askForAttention() {
             if (!focused.value) runCatching {
                 if (Taskbar.isTaskbarSupported()) {
                     val taskbar = Taskbar.getTaskbar()
@@ -378,6 +365,20 @@ fun main(args: Array<String>) {
                     }
                 }
             }
+        }
+        val post: (DesktopNotice) -> Unit = { notice ->
+            lastNotice = notice
+            // Windows' own notification where it can be had (it has buttons and stays in the Action Center);
+            // otherwise the tray's.
+            if (linuxNotices != null) linuxPost(notice, { host.session.value === notice.origin?.session }) { source, current ->
+                // Activate during this user action, before revealing its chat dismisses another page.
+                val mapped = frame?.takeIf { windowShown && it.isShowing && it.extendedState and Frame.ICONIFIED == 0 }
+                show(current)
+                if (mapped != null && current()) LinuxWindowActivation.request(mapped)
+                shortcuts.fire(Shortcut.RevealChat(source, current))
+            }
+            else if (!WindowsToasts.show(notice, approveOnce, deny)) tray.sendNotification(Notification(notice.title, notice.body, Notification.Type.None))
+            askForAttention()
         }
         LaunchedEffect(Unit) { DesktopNotifier(koin.get(), settingsStore, focused, post) { linuxNotices?.reconcile() }.start(this) }
         // The global shortcut from any app, while the setting is on.
@@ -401,9 +402,11 @@ fun main(args: Array<String>) {
             tooltip = TITLE,
             // A double-click on the icon, or a click on a notification: the window, at that notification's chat.
             onAction = {
-                show()
-                if (linuxNotices != null) lastLinuxOwner?.takeIf { it.current() }?.open()
-                else lastNotice?.sessionId?.let { links.open(it, lastNotice?.chatTitle) }
+                // A Linux notice's own open shows the window it came from: this one, or its chat's own, which the
+                // main window mustn't then come forward over.
+                val linuxOwner = lastLinuxOwner?.takeIf { linuxNotices != null && it.current() }
+                if (linuxOwner != null) linuxOwner.open() else show()
+                if (linuxNotices == null) lastNotice?.sessionId?.let { links.open(it, lastNotice?.chatTitle) }
                 lastNotice = null
                 lastLinuxOwner = null
             },
@@ -445,8 +448,9 @@ fun main(args: Array<String>) {
             dialogOwner = window
             frame = window
             LaunchedEffect(windowRaise) {
-                if (windowRaise != 0) SwingUtilities.invokeLater {
-                    if (windowRaiseGuard()) LinuxWindowActivation.request(window)
+                if (windowRaise != 0) {
+                    val current = windowRaiseGuard
+                    SwingUtilities.invokeLater { if (current()) LinuxWindowActivation.request(window) }
                 }
             }
             // Narrow enough for Windows' snap layouts (a third of a screen), where the sidebar folds into a drawer;
@@ -456,7 +460,10 @@ fun main(args: Array<String>) {
             LaunchedEffect(windowFocused, windowShown) {
                 focused.value = windowFocused && windowShown
                 // Back in the window, the user has seen what's new: a later tray click shouldn't jump to an old chat.
-                if (focused.value) lastNotice = null
+                if (focused.value) {
+                    lastNotice = null
+                    lastLinuxOwner = null
+                }
                 if (focused.value && connection.state.value is ConnectionState.Reconnecting) connection.retry()
             }
             val titleBar = DesktopTitleBar.rememberFor(window)
@@ -474,7 +481,7 @@ fun main(args: Array<String>) {
                             val id = shortcut.target.storedSessionId ?: return@ShortcutHandler false
                             val open = chatWindows.indexOfFirst { it.target.storedSessionId == id }
                             if (open >= 0) chatWindows[open] = chatWindows[open].let { it.copy(raise = it.raise + 1, raiseGuard = null) }
-                            else chatWindows += PoppedChat(shortcut.target, nextWindow++, ownerVersion = host.ownerVersion.value)
+                            else chatWindows += PoppedChat(shortcut.target, nextWindow++)
                             true
                         }
                         Shortcut.CloseWindow -> {
@@ -518,14 +525,18 @@ fun main(args: Array<String>) {
                     mac = mac,
                     onShowMain = ::show,
                     onPost = { notice ->
-                        if (linuxNotices == null) post(notice) else linuxPost(notice,
-                            owned = { host.ownerVersion.value == popped.ownerVersion &&
-                                host.session.value?.gateway == notice.origin?.session?.gateway && chatWindows.any { it.key == popped.key } },
-                            open = { _, current ->
-                                val at = chatWindows.indexOfFirst { it.key == popped.key }
-                                if (at >= 0) chatWindows[at] = chatWindows[at].let { it.copy(raise = it.raise + 1, raiseGuard = current) }
-                            },
-                        )
+                        if (linuxNotices == null) post(notice) else {
+                            linuxPost(notice,
+                                // The window outlives a profile switch in the main window, so its notices do too: it
+                                // closes with its gateway, and its own host says when its chat is replaced.
+                                owned = { host.session.value?.gateway == notice.origin?.session?.gateway && chatWindows.any { it.key == popped.key } },
+                                open = { _, current ->
+                                    val at = chatWindows.indexOfFirst { it.key == popped.key }
+                                    if (at >= 0) chatWindows[at] = chatWindows[at].let { it.copy(raise = it.raise + 1, raiseGuard = current) }
+                                },
+                            )
+                            askForAttention()
+                        }
                     },
                     onClose = { chatWindows.removeAll { it.key == popped.key }; linuxNotices?.reconcile() },
                     onNoticeChange = { linuxNotices?.reconcile() },

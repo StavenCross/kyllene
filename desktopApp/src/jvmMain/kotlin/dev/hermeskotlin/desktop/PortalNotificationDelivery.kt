@@ -87,10 +87,11 @@ internal class PortalNotificationDelivery(
                     }
                     val connection = bus
                     if (binding?.valid?.get() != true) {
-                        binding?.valid?.set(false)
-                        binding?.subscription?.close()
-                        binding?.let { withdraw(connection, it) }
-                        binding = bind(connection)
+                        val previous = binding
+                        previous?.valid?.set(false)
+                        runCatching { previous?.subscription?.close() }
+                        // A restarted portal's notices stay on the desktop: the new owner withdraws them by the same ids.
+                        binding = bind(connection).also { next -> previous?.let { next.sent.addAll(it.sent) } }
                     }
                     val target = checkNotNull(binding)
                     if (update.notice == null) {
@@ -130,7 +131,9 @@ internal class PortalNotificationDelivery(
         // Dispatch all withdrawals before one shared deadline, rather than waiting once per notice.
         val interrupted = Thread.interrupted()
         try {
-            val pending = target.sent.map { id -> runCatching { async<Void>(bus, target.portal, "RemoveNotification", id) }.getOrNull() }
+            // By name, not through the binding: a portal that restarted since takes down what the old one showed.
+            val portal = runCatching { bus.getRemoteObject(NAME, PATH, NotificationPortal::class.java) }.getOrNull() ?: return
+            val pending = target.sent.map { id -> runCatching { async<Void>(bus, portal, "RemoveNotification", id) }.getOrNull() }
             runCatching { CompletableFuture.allOf(*pending.filterNotNull().toTypedArray()).get(500, TimeUnit.MILLISECONDS) }
             target.sent.clear()
         } finally { if (interrupted) Thread.currentThread().interrupt() }

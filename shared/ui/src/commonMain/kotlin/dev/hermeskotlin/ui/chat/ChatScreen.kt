@@ -453,7 +453,8 @@ fun ChatScreen(
     var petsOpen by remember { mutableStateOf(false) }
     var journeyOpen by remember { mutableStateOf(false) }
     var usageOpen by remember { mutableStateOf(false) }
-    var processesOpen by rememberSaveable(target.copy(readUpTo = null)) { mutableStateOf(false) }
+    // Not keyed by the chat: the requests collector below holds this one state, and the sheet follows the chat.
+    var processesOpen by rememberSaveable { mutableStateOf(false) }
     var checkpointsOpen by remember { mutableStateOf(false) }
     var controlOpen by remember { mutableStateOf(false) }
     var focusComposer by remember { mutableIntStateOf(0) }
@@ -472,7 +473,8 @@ fun ChatScreen(
     val docked = previewing?.let { isDesktop && wide && it.kind != GatewayFileKind.Image } == true
     val railFile = previewing.takeIf { docked && railShown }
     // Over a sheet or a viewer, typing and shortcuts are the dialog's, not the chat's behind it.
-    val dialogOpen = modelsOpen || attachOpen || petsOpen || journeyOpen || usageOpen || processesOpen ||
+    val processesShown = processesOpen && ownsTranscript
+    val dialogOpen = modelsOpen || attachOpen || petsOpen || journeyOpen || usageOpen || processesShown ||
         checkpointsOpen || controlOpen || viewing != null || (previewing != null && !docked)
     // Esc in the rail is the viewer's own: back a file, then closed.
     ShortcutHandler(enabled = keysEnabled && docked) { shortcut ->
@@ -701,7 +703,7 @@ fun ChatScreen(
         onDismiss = { usageOpen = false },
     )
     ProcessesSheet(
-        visible = processesOpen && ownsTranscript,
+        visible = processesShown,
         controller = viewModel.processes,
         onStart = viewModel::watchProcesses,
         onKill = viewModel::killProcess,
@@ -2091,11 +2093,12 @@ private fun Messages(
             listState.scrollToItem(messages.lastIndex, LIST_END)
         }
     }
-    // What the bottom held when the reader last saw it; anything since is new to them.
-    val tail = messages.lastOrNull()?.let { it.key to it.contentSize() }
-    var seenTail by remember { mutableStateOf(tail) }
-    LaunchedEffect(awayFromBottom, tail) { if (!awayFromBottom) seenTail = tail }
-    val newBelow = awayFromBottom && tail != seenTail
+    // How much reply the bottom holds; more of it arriving while the reader is away from the end is new to them.
+    val tail = messages.replyMark()
+    val oldest = messages.firstOrNull()?.key
+    var replySeen by remember { mutableStateOf(ReplySeen(oldest, tail)) }
+    LaunchedEffect(awayFromBottom, oldest, tail) { replySeen = replySeen.next(awayFromBottom, oldest, tail) }
+    val newBelow = awayFromBottom && replySeen.new
     // Where the messages that came since the chat was last read begin. It stays put for the rest of this visit,
     // so reading on doesn't move or remove it under the reader; the next visit starts from the new last look.
     // Older pages load first while every loaded message is still new.
@@ -2463,14 +2466,46 @@ private suspend fun LazyListState.animateToEnd() {
     scrollToItem(last, LIST_END)
 }
 
-/** How much a message holds, so a reply growing at the bottom counts as new content. */
-private fun ChatMessage.contentSize(): Int = when (this) {
-    is ChatMessage.User -> text.length
-    is ChatMessage.Assistant -> text.length + reasoning.length + tools.size
-    is ChatMessage.Command -> output.length
-    is ChatMessage.Notice -> text.length
-    is ChatMessage.Event -> event.hashCode()
+/**
+ * How much there is to read at the chat's end, for the "New reply" pill: the latest prompt's length and the reply
+ * text written since it (all of it when no prompt is loaded). Thinking, tools, notices and other events add
+ * nothing, and keys aren't compared, so the live reply giving way to its stored row(s) isn't news.
+ */
+internal fun List<ChatMessage>.replyMark(): Pair<Int, Int> {
+    val prompt = indexOfLast { it is ChatMessage.User }
+    return (getOrNull(prompt)?.replyLength() ?: 0) to subList(prompt + 1, size).sumOf { it.replyLength() }
 }
+
+/**
+ * The text a reader would scroll down for: a prompt, a reply's answer, a command's output, or a turn having failed
+ * or ended with a warning. A reply's blank space isn't counted: the stream and the stored rows space its steps
+ * differently. A failure counts the same whatever it says, as the stored row may word it differently.
+ */
+private fun ChatMessage.replyLength(): Int = when (this) {
+    is ChatMessage.User -> text.length
+    is ChatMessage.Assistant -> text.count { !it.isWhitespace() } +
+        (if (error != null || outcome == TurnOutcome.Error) 1 else 0) + (if (warning != null) 1 else 0)
+    is ChatMessage.Command -> output.length
+    is ChatMessage.Event -> if (event is TranscriptEvent.FailedTurn) 1 else 0
+    is ChatMessage.Notice -> 0
+}
+
+/**
+ * The [replyMark] and oldest loaded row as they last were, and whether reply text has come ([new]) since the reader
+ * left the end. It stays new until they are back there, even if a later turn brings the mark back to what it was.
+ */
+internal data class ReplySeen(val oldest: String?, val mark: Pair<Int, Int>, val new: Boolean = false) {
+    /** A mark that changes as an earlier stored row becomes the oldest is an older page loading above, which isn't news. */
+    fun next(away: Boolean, oldest: String?, mark: Pair<Int, Int>): ReplySeen {
+        val was = this.oldest.storedRowId()
+        val now = oldest.storedRowId()
+        val olderPage = was != null && now != null && now < was
+        return ReplySeen(oldest, mark, new = away && (new || (mark != this.mark && !olderPage)))
+    }
+}
+
+/** The stored row a message's key (`row-<id>`, as `historyToMessages` gives it) was made from, if any. */
+private fun String?.storedRowId(): Long? = this?.takeIf { it.startsWith("row-") }?.removePrefix("row-")?.substringBefore('-')?.toLongOrNull()
 
 /** Tells apart the ways the link can be down: none, being re-made, or needing a new sign-in. */
 @Composable

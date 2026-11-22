@@ -81,6 +81,28 @@ class LinuxNotificationsTest {
     }
 
     @Test
+    fun denyingAnApprovalDoesNotOpenItsSource() {
+        val request = InputRequest.Approval("deny", "example", "Run command", null, listOf(ApprovalChoice.Once, ApprovalChoice.Deny))
+        notifications.post(reply.copy(request = request), owner)
+        val (id, notice) = delivery.shown.entries.single()
+        notifications.action(id, notice.buttons.last().second)
+        notifications.action(id, notice.buttons.last().second)
+        assertEquals(listOf(ApprovalChoice.Deny), answers)
+        assertEquals(0, opened)
+        assertTrue(delivery.shown.isEmpty())
+    }
+
+    @Test
+    fun deliveryAndOwnerExpiryDoNotOpenTheSource() {
+        notifications.post(reply, owner)
+        assertEquals(0, opened)
+        valid = false
+        notifications.reconcile()
+        assertEquals(0, opened)
+        assertTrue(delivery.shown.isEmpty())
+    }
+
+    @Test
     fun approvalButtonsUseTheCurrentApplicationLanguage() {
         val approval = InputRequest.Approval("q1", "echo hello", "Run command", null, listOf(ApprovalChoice.Once, ApprovalChoice.Deny))
         labels = "Einmal freigeben" to "Ablehnen"

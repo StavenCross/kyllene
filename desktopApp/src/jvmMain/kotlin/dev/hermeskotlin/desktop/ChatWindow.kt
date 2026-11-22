@@ -119,6 +119,7 @@ fun ChatWindow(
             if (raise > 0 && raiseGuard?.invoke() != false) {
                 window.toFront()
                 window.requestFocus()
+                if (raiseGuard?.invoke() != false) LinuxWindowActivation.request(window)
             }
         }
         val host = remember { ChatHost(koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get()) }
