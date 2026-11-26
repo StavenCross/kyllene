@@ -279,6 +279,7 @@ import dev.hermeskotlin.designsystem.rememberHoverIndication
 import dev.hermeskotlin.core.chat.Attachment
 import dev.hermeskotlin.core.chat.ChatMessage
 import dev.hermeskotlin.core.chat.TranscriptEvent
+import dev.hermeskotlin.core.chat.replyTextOrNull
 import dev.hermeskotlin.core.chat.GatewayNotice
 import dev.hermeskotlin.core.chat.ChatState
 import dev.hermeskotlin.core.chat.OutgoingAttachment
@@ -593,6 +594,10 @@ fun ChatScreen(
     val density = LocalDensity.current
     val modelPillBounds = remember { mutableStateOf<Rect?>(null) }
     val conversationKey = Triple(target.gateway.gatewayUrl, target.profile, target.storedSessionId)
+    val editing = viewModel.editing.collectAsStateWithLifecycle().value
+    val imagePaste = if (ownsTranscript && connected && keysEnabled && !dialogOpen && editing == null &&
+        attachments.size < OutgoingAttachment.MAX_COUNT
+    ) attachmentPicker.imagePasteModifier { read -> viewModel.pasteImages(target, read) } else Modifier
     Box(Modifier.fillMaxSize().onSizeChanged { paneWidth = with(density) { it.width.toDp() } }) {
     CompositionLocalProvider(LocalModelPillBounds provides modelPillBounds) {
     ChatView(
@@ -638,7 +643,7 @@ fun ChatScreen(
         notice = notice,
         actions = viewModel,
         widgetFiles = transcript.widgetFiles,
-        editing = viewModel.editing.collectAsStateWithLifecycle().value,
+        editing = editing,
         // Only for the chat it was taken for, not one the screen moved on to (a branch, a fresh start).
         readUpTo = readPosition?.readUpTo?.takeIf { state.storedSessionId == target.storedSessionId },
         onReadLatest = if (readPosition != null && ownsTranscript && screenShown && connected && state.historyRead && !state.running) {
@@ -673,6 +678,7 @@ fun ChatScreen(
         focusComposer = focusComposer,
         keysEnabled = keysEnabled && !dialogOpen,
         attachmentPicker = attachmentPicker.takeIf { isDesktop },
+        imagePaste = imagePaste,
         rail = railFile?.let { file ->
             {
                 FileViewer(file, onDismiss = { previewing = null }, load = viewModel::previewFile, download = viewModel::downloadFile, docked = true)
@@ -846,6 +852,7 @@ internal fun ChatView(
     keysEnabled: Boolean = true,
     /** Takes files dropped on the chat and pasted into it (the desktop's). */
     attachmentPicker: AttachmentPicker? = null,
+    imagePaste: Modifier = Modifier,
     /** A panel at the right, beside the conversation: the desktop's file rail. */
     rail: (@Composable () -> Unit)? = null,
 ) {
@@ -1279,6 +1286,7 @@ internal fun ChatView(
                         onOpenControl = onOpenControl,
                         voiceFull = voiceFull,
                         onExpandVoice = { voiceFolded = false },
+                        imagePaste = imagePaste,
                         onPasteFiles = { canAttach && keysEnabled && attachmentPicker?.pasteAttachments() == true },
                     )
                 }
@@ -1415,6 +1423,7 @@ private fun ColumnScope.Dock(
     /** The voice chat is open over the whole screen. */
     voiceFull: Boolean,
     onExpandVoice: () -> Unit,
+    imagePaste: Modifier,
     /** A paste in the composer: true when it attached files, a picture or a long text (the desktop's). */
     onPasteFiles: () -> Boolean = { false },
 ) {
@@ -1584,6 +1593,7 @@ private fun ColumnScope.Dock(
                 onAttach = onAttach,
                 onDictate = onDictate,
                 onVoiceChat = onVoiceChat,
+                imagePaste = imagePaste,
                 onKey = { event ->
                     // A bot named so far comes before "A file" / "A folder", which any short @ word offers too.
                     val listed = when {
@@ -1619,6 +1629,7 @@ private fun ComposerNotice.text(): String = when (this) {
     is ComposerNotice.Said -> text
     ComposerNotice.PromptNotSent -> stringResource(Res.string.chat_notice_prompt_not_sent)
     ComposerNotice.CallNotStarted -> stringResource(Res.string.chat_notice_call_not_started)
+    ComposerNotice.ImagePasteTimedOut -> stringResource(Res.string.android_attach_photo_failed)
     is ComposerNotice.TooManyAttachments -> stringResource(Res.string.chat_notice_too_many_files, max)
     is ComposerNotice.FileTooLarge -> stringResource(Res.string.chat_notice_file_too_large, name, megabytes)
 }
@@ -1989,7 +2000,9 @@ private fun Messages(
 ) {
     var confirm by remember { mutableStateOf<Pair<MessageChange, String>?>(null) }
     val lastPrompt = messages.lastOrNull { it is ChatMessage.User }?.key
-    val lastReply = messages.lastOrNull { it is ChatMessage.Assistant && it.text.isNotBlank() }?.key
+    val lastReply = messages.lastOrNull {
+        it is ChatMessage.Assistant && (it.text.isNotBlank() || it.commentary.isNotEmpty())
+    }?.key
     val faces = LocalBotFaces.current
     val partners = remember(messages, faces) { messages.map { exchangePartner(it, faces) } }
     // The rewind rules read only the messages.
@@ -2473,13 +2486,14 @@ internal fun List<ChatMessage>.replyMark(): Pair<Int, Int> {
 }
 
 /**
- * The text a reader would scroll down for: a prompt, a reply's answer, a command's output, or a turn having failed
+ * The text a reader would scroll down for: a prompt, a reply's text and commentary, a command's output, or a turn having failed
  * or ended with a warning. A reply's blank space isn't counted: the stream and the stored rows space its steps
  * differently. A failure counts the same whatever it says, as the stored row may word it differently.
  */
 private fun ChatMessage.replyLength(): Int = when (this) {
     is ChatMessage.User -> text.length
     is ChatMessage.Assistant -> text.count { !it.isWhitespace() } +
+        commentary.sumOf { update -> update.count { !it.isWhitespace() } } +
         (if (error != null || outcome == TurnOutcome.Error) 1 else 0) + (if (warning != null) 1 else 0)
     is ChatMessage.Command -> output.length
     is ChatMessage.Event -> if (event is TranscriptEvent.FailedTurn) 1 else 0
@@ -3048,7 +3062,9 @@ internal fun AssistantReply(
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val actionable = !message.streaming && text.isNotBlank()
-    val canMenu = isDesktop && actionable
+    val copyText = remember(message.commentary, text) { message.transcriptText(text) }
+    val copyable = !message.streaming && copyText.isNotBlank()
+    val canMenu = isDesktop && copyable
     // A reply of only code or files has nothing to say, in either menu.
     val speakable = remember(text, actionable) { actionable && readAloudText(text).isNotEmpty() }
     // Said by the menu and the icons alike; read here, as the menu is built outside composition.
@@ -3062,9 +3078,9 @@ internal fun AssistantReply(
     if (canMenu) {
         RowContextMenu(contextMenuOpen, onDismiss = { contextMenuOpen = false }) {
             listOfNotNull(
-                RowMenuItem(copyLabel, Lucide.Copy) { scope.launch { clipboard.setClipEntry(plainTextClipEntry(text)) } },
-                onRegenerate?.let { RowMenuItem(regenerateLabel, Lucide.RefreshCw, run = it) },
-                onBranch?.let { RowMenuItem(branchLabel, Lucide.GitBranch, run = it) },
+                RowMenuItem(copyLabel, Lucide.Copy) { scope.launch { clipboard.setClipEntry(plainTextClipEntry(copyText)) } },
+                onRegenerate?.takeIf { actionable }?.let { RowMenuItem(regenerateLabel, Lucide.RefreshCw, run = it) },
+                onBranch?.takeIf { actionable }?.let { RowMenuItem(branchLabel, Lucide.GitBranch, run = it) },
                 if (reading) RowMenuItem(if (readingPaused) resumeReadingLabel else pauseReadingLabel, if (readingPaused) Lucide.Play else Lucide.Pause, run = if (readingPaused) onResumeReading else onPauseReading)
                 else null,
                 if (reading) RowMenuItem(stopReadingLabel, Lucide.Square, run = onStopReading)
@@ -3081,6 +3097,9 @@ internal fun AssistantReply(
         ReplyHeader(message.timestamp.takeUnless { message.streaming })
         // What's happening now is said once, above the composer; the reply keeps only what it's made of.
         if (showReasoning) Reasoning(message.reasoning, message.streaming)
+        message.commentary.forEach { update ->
+            MarkdownText(remember(update) { linkFileUris(update) })
+        }
         // While the turn runs its finished steps are listed as they land; once it ends they fold into the pill.
         if (showTools) if (message.streaming) LiveSteps(listedTools, message.key) else Tools(listedTools, message.key)
         if (generated.isNotEmpty()) ReplyMediaList(remember(generated) { generated.map { it.asMedia() } })
@@ -3133,7 +3152,7 @@ internal fun AssistantReply(
         val react = onReact.takeIf { !message.streaming && message.reactionRowId != null }
         val reaction = message.userReaction.takeUnless { message.streaming }
         val hasMore = actions.isNotEmpty() || react != null
-        if (actionable || usage != null || react != null || reaction != null) {
+        if (copyable || usage != null || react != null || reaction != null) {
             var keysInside by remember { mutableStateOf(false) }
             var moreOpen by remember { mutableStateOf(false) }
             LaunchedEffect(hasMore) { if (!hasMore) moreOpen = false }
@@ -3149,7 +3168,7 @@ internal fun AssistantReply(
             val usageText = usage?.let { replyUsage(it.input, it.output) }
             val usageStyle = Theme[typography][caption].copy(fontFamily = Theme[typography][code].fontFamily)
             BoxWithConstraints(Modifier.fillMaxWidth().trimEndTop(end = 0.dp, top = 4.dp)) {
-                val copyWidth = if (actionable) {
+                val copyWidth = if (copyable) {
                     val size = ButtonSize.Small
                     maxOf(size.labelledIconWidth(copyLabel), size.labelledIconWidth(LocalDesignWords.current.copied)) + 2.dp
                 } else 0.dp
@@ -3193,9 +3212,9 @@ internal fun AssistantReply(
                         else ReplyAction(Lucide.Pause, pauseReadingLabel, onPauseReading, Modifier.size(iconSize))
                         ReplyAction(Lucide.Square, stopReadingLabel, onStopReading, Modifier.size(iconSize))
                     }
-                    if (actionable) Box(hidden.alpha(alpha)) {
-                        if (labelled) CopyButton(text, visibleLabel = copyLabel)
-                        else CopyButton(text, modifier = Modifier.size(iconSize), label = copyLabel)
+                    if (copyable) Box(hidden.alpha(alpha)) {
+                        if (labelled) CopyButton(copyText, visibleLabel = copyLabel)
+                        else CopyButton(copyText, modifier = Modifier.size(iconSize), label = copyLabel)
                     }
                     if (reaction != null) ReplyReactionBadge(reaction)
                     if (hasMore) Box(hidden.alpha(alpha)) {
@@ -3284,12 +3303,11 @@ private fun UnreadDivider(modifier: Modifier = Modifier) {
 }
 
 /**
- * With reasoning hidden, a finished reply of nothing but reasoning (a step that only thought, or only commented
- * on its way) would be a bare header: it isn't listed.
+ * With reasoning hidden, a finished reply of nothing but reasoning (a step that only thought) would be a bare header: it isn't listed.
  */
 internal fun List<ChatMessage>.withoutBlankReplies(showReasoning: Boolean): List<ChatMessage> =
     if (showReasoning) this else filterNot {
-        it is ChatMessage.Assistant && !it.streaming && it.text.isBlank() && it.tools.isEmpty() && it.error == null &&
+        it is ChatMessage.Assistant && !it.streaming && it.text.isBlank() && it.commentary.isEmpty() && it.tools.isEmpty() && it.error == null &&
             it.warning == null && it.outcome != TurnOutcome.Error && it.outcome != TurnOutcome.Interrupted
     }
 
@@ -3358,8 +3376,9 @@ internal val ChatMessage.sentAt: Double?
 
 private fun ChatMessage.isNewerThan(readUpTo: Double): Boolean = when (this) {
     is ChatMessage.User -> (timestamp ?: return false) > readUpTo + UNREAD_SLACK_SECONDS
-    // A reply with no time yet is still being written, so it came after the last look.
-    is ChatMessage.Assistant -> (timestamp ?: Double.MAX_VALUE) > readUpTo + UNREAD_SLACK_SECONDS
+    // Anchor the line before the first streamed word and keep it for finished replies with public text.
+    is ChatMessage.Assistant -> (streaming || text.replyTextOrNull() != null || commentary.isNotEmpty()) &&
+        (timestamp ?: Double.MAX_VALUE) > readUpTo + UNREAD_SLACK_SECONDS
     // Another bot writing in is news even when this bot stays silent. The machinery's own rows (deliveries,
     // routines, failures) aren't: the line goes above something the person would want to read.
     is ChatMessage.Event -> event is TranscriptEvent.FromBot && (timestamp ?: return false) > readUpTo + UNREAD_SLACK_SECONDS
@@ -4129,6 +4148,7 @@ private fun Composer(
     onVoiceChat: () -> Unit,
     /** A prompt is being edited: it can't go out mid-turn, as the gateway won't cut the chat while a task runs. */
     editing: Boolean,
+    imagePaste: Modifier,
     /** The desktop's keys in the field before its own: a paste that attaches, a suggestion picked. */
     onKey: (KeyEvent) -> Boolean = { false },
 ) {
@@ -4184,6 +4204,7 @@ private fun Composer(
                         state = actions.composer,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp).padding(horizontal = 12.dp).focusRequester(focus)
                             .onFocusChanged { fold.typing = it.hasFocus }
+                            .then(imagePaste)
                             .then(
                                 if (!enterSends) {
                                     Modifier
