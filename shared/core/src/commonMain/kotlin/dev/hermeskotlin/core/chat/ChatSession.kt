@@ -105,6 +105,10 @@ class ChatSession(
 
     /** Held by a [submit] from its uploads until its prompt is settled; see there. */
     private val sendMutex = Mutex()
+    private val reactionMutex = Mutex()
+
+    /** The stored rows of replies whose reaction is being saved now. */
+    private val reacting = MutableStateFlow(emptySet<Long>())
 
     /**
      * The socket [ChatState.runtimeSessionId] was attached on. Runtime ids belong to the
@@ -211,6 +215,7 @@ class ChatSession(
         jobs = listOf(
             scope.launch { if (rowExists) loadHistory() else _state.update { it.copy(historyLoaded = true) } },
             scope.launch { followConnection() },
+            scope.launch { followReactionSupport() },
             scope.launch { followEvents() },
             scope.launch { followServerRequests() },
         ) + _state.value.messages.mapNotNull { card ->
@@ -255,6 +260,93 @@ class ChatSession(
         voiceLive: VoiceLiveTurn? = null,
     ): SendOutcome = submitPrompt(text, attachments, display, queue, voiceLive, resent = emptyList())
 
+    /**
+     * Sets or clears the user's reaction on the stored reply [replyKey], by its row: the newest row can change
+     * meanwhile. Reactions go one at a time; another tap on the same reply (by its row: a reload can rename a live
+     * reply meanwhile) while its reaction is still being saved is ignored, as the same emoji again would take it
+     * off after its follow-up has gone.
+     */
+    suspend fun react(replyKey: String, reaction: ReplyReaction, stillOpen: () -> Boolean) {
+        val reply = _state.value.messages.filterIsInstance<ChatMessage.Assistant>().firstOrNull { it.key == replyKey }
+            ?.takeUnless { it.streaming } ?: return
+        val rowId = reply.reactionRowId ?: return
+        var claimed = false
+        reacting.update { rows -> (rowId !in rows).also { claimed = it }.let { if (it) rows + rowId else rows } }
+        if (!claimed) return
+        try {
+            reactionMutex.withLock { reactToStoredReply(reply, rowId, reaction, stillOpen) }
+        } finally {
+            reacting.update { it - rowId }
+        }
+    }
+
+    private suspend fun reactToStoredReply(
+        reply: ChatMessage.Assistant,
+        rowId: Long,
+        reaction: ReplyReaction,
+        stillOpen: () -> Boolean,
+    ) {
+        try {
+            if (!stillOpen()) return
+            val client = connectedClient() ?: throw RpcException(0, "Connect to the gateway to react.")
+            if (!client.replyReactionsSupported.value) return
+            val runtimeId = ensureAttached(client)
+            // By its row: a reload meanwhile renames a live reply's key but not its row.
+            val shown = _state.value.messages.firstOrNull {
+                it is ChatMessage.Assistant && !it.streaming && it.reactionRowId == rowId
+            } as? ChatMessage.Assistant
+            if (!stillOpen() || connectedClient() !== client || shown == null) return
+            // The same emoji again clears it on the gateway, so what happens follows the gateway's state, not the
+            // screen's. One set where the screen showed none, as on another client not yet reloaded here, is set again.
+            val setting = shown.userReaction != reaction.emoji
+            suspend fun send() = client.request("message.react", buildJsonObject {
+                put("session_id", runtimeId)
+                put("row_id", rowId)
+                put("emoji", reaction.emoji)
+            }) as? JsonObject
+            val result = try {
+                send().let { first ->
+                    val cleared = userReactionEmoji(first?.get("reactions")) != reaction.emoji
+                    if (setting && cleared && first?.get("reactions") is JsonArray) send() else first
+                }
+            } catch (e: RpcException) {
+                if (e.code != METHOD_NOT_FOUND) throw e
+                client.markReplyReactionsUnsupported()
+                if (stillOpen()) _state.update { it.copy(error = "This gateway doesn't support reactions. Update Hermes to use them.") }
+                return
+            }
+            val returned = result?.get("reactions") as? JsonArray
+                ?: throw RpcException(0, "The gateway did not confirm the reaction.")
+            val emoji = userReactionEmoji(returned)
+            historyMutex.withLock {
+                // Saved on the gateway by its stored row, which a re-attach or reconnect meanwhile doesn't change.
+                if (!stillOpen()) return
+                rows = rows.map { row ->
+                    if (row.id == rowId) {
+                        val metadata = displayMetadataObject(row.displayMetadata).orEmpty()
+                        row.copy(displayMetadata = JsonObject(metadata + ("reactions" to returned)))
+                    } else row
+                }
+                _state.update { state ->
+                    state.copy(messages = state.messages.map {
+                        if (it is ChatMessage.Assistant && it.reactionRowId == rowId) it.copy(userReaction = emoji) else it
+                    })
+                }
+            }
+            if (cache != null) scope.launch { refreshSavedCopy() }
+            if (emoji == reaction.emoji) reaction.prompt(reply.text)?.let { prompt ->
+                submitPrompt(
+                    prompt, emptyList(), display = null, queue = _state.value.running, voiceLive = null,
+                    resent = emptyList(), keepRejected = true,
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (stillOpen()) _state.update { it.copy(error = e.message ?: "Could not save the reaction.") }
+        }
+    }
+
     /** [submit], with [resent]: the `@file:` references, and their cards, of a prompt sent again ([resend]). */
     private suspend fun submitPrompt(
         text: String,
@@ -264,6 +356,7 @@ class ChatSession(
         voiceLive: VoiceLiveTurn?,
         resent: List<Pair<String, ShownAttachment>>,
         resentImages: List<Pair<StagedImage, ShownAttachment>> = emptyList(),
+        keepRejected: Boolean = false,
     ): SendOutcome {
         val trimmed = text.trim()
         if (trimmed.isEmpty() && attachments.isEmpty() && resent.isEmpty() && resentImages.isEmpty()) return SendOutcome.NotSent
@@ -271,6 +364,9 @@ class ChatSession(
         val visible = trimmed.ifEmpty {
             if (attachments.any { it.kind == AttachmentKind.Image } || resentImages.isNotEmpty()) IMAGE_ONLY_PROMPT else ""
         }
+        val copiesBefore = if (keepRejected) _state.value.messages.count {
+            it is ChatMessage.User && !it.pending && it.check == null && it.text.contains(visible)
+        } else 0
         val key = "local-${_state.value.keySeq}"
         _state.update {
             it.copy(
@@ -362,14 +458,18 @@ class ChatSession(
             // The row written for it, so it can be regenerated or edited before the transcript is read again.
             val rowId = result.long("user_row_id")
             val sentText = visible.takeIf { attachments.isEmpty() && resent.isEmpty() && display == null && it.isNotEmpty() }
-            // The session authority answers every prompt "queued", one that starts a turn too. Marked so, a prompt whose
-            // turn began before this read the reply would wait for a start that has already come.
-            val held = status == "queued" && !(client.sessionAuthority && startsTurn)
+            // The session authority's id for it, which its turn's events carry.
+            val admissionId = result.string("admission_id")?.takeIf { client.sessionAuthority }
             _state.update { state ->
+                // The session authority answers every prompt "queued", one that starts a turn too. Marked so, a prompt
+                // whose turn began before this read the reply would wait for a start that has already come.
+                val started = admissionId != null && admissionId in state.startedAdmissions
+                val held = status == "queued" && !(client.sessionAuthority && startsTurn) && !started
                 val sent = state.copy(
-                    running = true,
+                    // A turn whose start was read first has said whether it still runs, its end too.
+                    running = state.running || !started,
                     messages = state.messages.updateUser(key) {
-                        it.copy(pending = false, queued = held, rowId = rowId ?: it.rowId, sentText = sentText)
+                        it.copy(pending = false, queued = held, rowId = rowId ?: it.rowId, sentText = sentText, admissionId = admissionId)
                     },
                 )
                 // What streamed before the correction stays above it; the rest of the turn continues below.
@@ -383,21 +483,27 @@ class ChatSession(
             // An error reply is the gateway turning it down; anything else after it went out is no verdict.
             if (submitted && e !is RpcException) {
                 val arrived = if (startsTurn) findInTranscript(visible, key, promptsBefore) else null
-                return settleUnanswered(key, arrived, UnsettledPrompt(text, display, startsTurn, files.toList(), stagedImages.toList())) {
+                val prompt = UnsettledPrompt(text, display, startsTurn, files.toList(), stagedImages.toList(), keepRejected, copiesBefore)
+                return settleUnanswered(key, arrived, prompt) {
                     detach(uploadClient, uploadRuntimeId, queuedImages)
                 }
             }
             detach(uploadClient, uploadRuntimeId, queuedImages)
             val refused = SessionRefusal.of(e)
-            _state.update { state ->
-                state.copy(
-                    error = if (refused != null) null else e.message ?: "Couldn't send the message.",
-                    refused = refused,
-                    // The caller gets the text back to resend; a dead bubble would only duplicate it.
-                    messages = state.messages.filterNot { it.key == key },
-                )
+            if (keepRejected) {
+                unsettled[key] = UnsettledPrompt(text, display, startsTurn, keepRejected = true, copiesBefore = copiesBefore)
+                retainRejectedPrompt(key, e.message ?: "Couldn't send the message.", refused)
+            } else {
+                _state.update { state ->
+                    state.copy(
+                        error = if (refused != null) null else e.message ?: "Couldn't send the message.",
+                        refused = refused,
+                        // The caller gets the text back to resend; a dead bubble would only duplicate it.
+                        messages = state.messages.filterNot { it.key == key },
+                    )
+                }
+                SendOutcome.NotSent
             }
-            SendOutcome.NotSent
         } finally {
             sendMutex.unlock()
         }
@@ -423,6 +529,10 @@ class ChatSession(
             }
             false -> {
                 takeBack()
+                if (prompt.keepRejected) {
+                    unsettled[key] = prompt
+                    return retainRejectedPrompt(key, "Hermes didn't get your message.")
+                }
                 _state.update { state ->
                     state.copy(
                         error = "Hermes didn't get your message. It's back in the composer.",
@@ -445,6 +555,19 @@ class ChatSession(
             false -> SendOutcome.NotSent
             null -> SendOutcome.Unsettled
         }
+    }
+
+    /** A generated prompt has no composer draft to restore. Keep its bubble available to resend. */
+    private fun retainRejectedPrompt(key: String, error: String, refused: SessionRefusal? = null): SendOutcome {
+        _state.update { state ->
+            state.copy(
+                // A refusal says why with its own guidance, as for any prompt; the bubble stays to resend from.
+                error = if (refused != null) null else error,
+                refused = refused,
+                messages = state.messages.updateUser(key) { it.copy(pending = false, check = SendCheck.NotReceived) },
+            )
+        }
+        return SendOutcome.Unsettled
     }
 
     /**
@@ -519,10 +642,11 @@ class ChatSession(
             prompt?.text ?: shown,
             emptyList(),
             prompt?.display,
-            queue = false,
+            queue = prompt?.keepRejected == true && _state.value.running,
             voiceLive = null,
             resent = prompt?.files.orEmpty(),
             resentImages = prompt?.images.orEmpty(),
+            keepRejected = prompt?.keepRejected == true,
         )
         return shown.takeIf { outcome == SendOutcome.NotSent }
     }
@@ -923,6 +1047,9 @@ class ChatSession(
             finishCommand(key, shown.message ?: "/${command.name} failed.", failed = true)
             return null
         }
+        // A command may have set or moved the goal, loop or heartbeat: `/goal`, `/hb`, or a quick alias the session
+        // authority resolves itself, so the name typed doesn't tell. v0.22.1's authority sends no update for it.
+        if (result !is SlashResult.Alias && controlUnpublished(anyChat = true)) scope.launch { refreshControl() }
         return when (result) {
             is SlashResult.Output -> {
                 val text = result.text.ifBlank { "Done." }
@@ -1158,16 +1285,43 @@ class ChatSession(
     private var controlByCommandOn: JsonRpcClient? = null
 
     /**
+     * The link a `session.control.update` came in on. A session authority of Hermes v0.22.1 sends none, not after a
+     * typed `/goal` nor after the goal's judge; v0.22.3 and later do (gateway/session_commands.py, run_goals.py).
+     * Those send one only when something changes, so a new link to them is read after each turn until one comes.
+     */
+    private var controlPublishedOn: JsonRpcClient? = null
+
+    /** Writes to the state that aren't reads (`session.control.update`, a [runControl] answer); a read out meanwhile yields. */
+    private var controlWrites = 0
+
+    /** The last `session.control.read` sent, and the last whose answer was taken: an earlier read's answer is older. */
+    private var controlReadsSent = 0
+    private var controlReadTaken = 0
+
+    /**
+     * Whether the attached link is a session authority that hasn't shown it sends `session.control.update`, while the
+     * chat has a goal, loop or heartbeat: its state is read again when a turn ends or the judge speaks. With
+     * [anyChat] it holds for a chat with none yet, as another client may just have set one.
+     */
+    private fun controlUnpublished(anyChat: Boolean = false): Boolean {
+        val client = attachedClient ?: return false
+        return client.sessionAuthority && client !== controlPublishedOn && (anyChat || _state.value.control != null)
+    }
+
+    /**
      * Reads the session's goal, loop and heartbeat once (`session.control.read`), since `session.resume`
      * doesn't carry them; later changes arrive as `session.control.update` events. Best effort: a gateway
      * that doesn't know the method hides the feature, and any other failure leaves the state as it is.
+     * Returns whether the gateway answered; an answer older than an update or read that came in meanwhile yields to it.
      */
     suspend fun refreshControl(): Boolean {
         val client = connectedClient() ?: return false
         if (client === controlUnsupportedOn) return false
         val runtimeId = liveRuntimeId(client) ?: return false
-        // An update that lands while the read is out is newer than the read's answer, so the answer yields to it.
-        val before = _state.value.control
+        // An update that lands while the read is out is newer than the read's answer, so the answer yields to it, as it
+        // does to a later read's answer: reads after a turn's end and after the judge's status can overlap.
+        val writes = controlWrites
+        val read = ++controlReadsSent
         val result = try {
             client.request("session.control.read", buildJsonObject { put("session_id", runtimeId) }) as? JsonObject
         } catch (e: CancellationException) {
@@ -1179,7 +1333,10 @@ class ChatSession(
             return false
         }
         if (result == null || "control" !in result) return false
-        _state.update { if (it.control !== before) it else it.withControl(SessionControl.parse(result["control"] as? JsonObject)) }
+        if (controlWrites == writes && read > controlReadTaken) {
+            controlReadTaken = read
+            _state.update { it.withControl(SessionControl.parse(result["control"] as? JsonObject)) }
+        }
         return true
     }
 
@@ -1254,8 +1411,9 @@ class ChatSession(
         } catch (e: Exception) {
             return e.message ?: "Couldn't open the session."
         }
-        // As with the read: an update from another client that lands first is newer than this answer.
-        val before = _state.value.control
+        // As with the read: an update from another client that lands first is newer than this answer. A read's answer
+        // that lands first isn't: it may have been sent before this action.
+        val writes = controlWrites
         val result = try {
             if (client === controlByCommandOn) {
                 controlByCommand(client, runtimeId, action, text, index)
@@ -1281,8 +1439,11 @@ class ChatSession(
         } catch (e: Exception) {
             return e.message ?: "Couldn't ${action.verb}."
         }
-        if (result != null && "control" in result) {
-            _state.update { if (it.control !== before) it else it.withControl(SessionControl.parse(result["control"] as? JsonObject)) }
+        if (result != null && "control" in result && controlWrites == writes) {
+            controlWrites++
+            // Reads still out were sent before this answer, so theirs are no newer.
+            controlReadTaken = controlReadsSent
+            _state.update { it.withControl(SessionControl.parse(result["control"] as? JsonObject)) }
         }
         val dispatch = result?.get("dispatch") as? JsonObject
         if (dispatch.string("type") == "send") {
@@ -2388,6 +2549,15 @@ class ChatSession(
         }
     }
 
+    private suspend fun followReactionSupport() {
+        connection.state.collectLatest { state ->
+            val client = (state as? ConnectionState.Connected)?.client ?: return@collectLatest
+            client.replyReactionsSupported.collect { supported ->
+                _state.update { it.copy(replyReactionsSupported = supported) }
+            }
+        }
+    }
+
     private suspend fun followEvents() {
         connection.events.collect { event ->
             val runtimeId = _state.value.runtimeSessionId ?: run {
@@ -2580,6 +2750,8 @@ class ChatSession(
         }
         val now = nowSeconds()
         val noticesBefore = _state.value.notices
+        // Only an update that carries the state moves it (ChatReducer), so only that one outdates a read that's out.
+        if (event.type == "session.control.update" && (event.payload as? JsonObject)?.get("control") is JsonObject) controlWrites++
         // Cleared before the turn's end lands, so no rows laid out meanwhile still take it as running.
         if (event.type == "message.complete") {
             turnStartedAt = null
@@ -2599,20 +2771,29 @@ class ChatSession(
             "tool.output_risk" -> flaggedOutput(event.payload as? JsonObject)?.let { (id, risk) ->
                 risks?.let { scope.launch { it.remember(id, risk) } }
             }
+            "session.control.update" -> controlPublishedOn = attachedClient
+            // The goal's judge runs after the turn ends and can finish after the read on `message.complete`, so its
+            // verdict is read again on the status it sends (v0.22.1 gateway/run_goals.py `_send_goal_status_notice`).
+            "status.update" -> if ((event.payload as? JsonObject).string("kind") == "goal" && controlUnpublished(anyChat = true)) {
+                scope.launch { refreshControl() }
+            }
             "message.start" -> if (ownTurnsPending > 0) {
                 ownTurnsPending--
             } else {
                 foreignTurn = true
                 scope.launch { loadHistory() }
+                // The kickoff of a goal another client just typed: v0.22.1 stored it before the turn, unpublished.
+                if (controlUnpublished(anyChat = true)) scope.launch { refreshControl() }
             }
             // Swap the live copy for the stored rows, which now hold the other client's prompt for sure.
             "message.complete" -> {
                 // Nothing can still wait on a person once the turn is over; this also clears a
                 // clarify answered on another client, which gets no request.cancel.
                 _state.update { it.copy(inputRequests = emptyList()) }
-                // A gateway without `session.control` sends no update either: a resumed goal's turn and its judge
-                // move the goal on unseen, so it's read again.
-                if (controlByCommandOn != null && controlByCommandOn === attachedClient) scope.launch { refreshControl() }
+                // A gateway that sends no `session.control.update` (v0.22.1's authority): the goal's turn moved it on
+                // unseen, so it's read again. A turn from another client may be the kickoff of a goal it just typed
+                // into a chat that had none, so that one is read whatever the strip shows.
+                if (controlUnpublished(anyChat = foreignTurn)) scope.launch { refreshControl() }
                 if (foreignTurn || rewound) {
                     foreignTurn = false
                     rewound = false
@@ -2705,14 +2886,16 @@ class ChatSession(
         }
     }
 
-    /** The copy last written to the device, by row count and newest row id, so an unchanged transcript isn't written again. */
-    private var savedCopyKey: Pair<Int, Long?>? = null
+    /** The last saved copy's row count, newest row ID and user reactions. */
+    private var savedCopyKey: Triple<Int, Long?, List<Pair<Long?, String>>>? = null
     private var saveJob: Job? = null
+    private val savedCopyRefreshMutex = Mutex()
 
     /** Writes [saved] as the device's copy of chat [id], off the history lock; a newer copy replaces one still being written. */
     private fun saveCopy(id: String, saved: List<SessionMessage>, savedSessionId: String?) {
         val cache = cache ?: return
-        val key = saved.size to saved.lastOrNull()?.id
+        val reactions = saved.mapNotNull { row -> row.userReaction?.let { row.id to it } }
+        val key = Triple(saved.size, saved.lastOrNull()?.id, reactions)
         if (key == savedCopyKey) return
         savedCopyKey = key
         saveJob?.cancel()
@@ -2724,14 +2907,19 @@ class ChatSession(
      * loaded rows don't have. Nothing shown changes.
      */
     private suspend fun refreshSavedCopy() {
-        val id = _state.value.storedSessionId ?: return
-        val page = (sessions.messages(gateway, id, limit = HISTORY_PAGE, profile = profile) as? ApiResult.Success)?.value ?: return
-        historyMutex.withLock {
-            if (!_state.value.historyRead || _state.value.storedSessionId != id) return
-            val full = page.messages.size >= HISTORY_PAGE
-            val newest = if (full) page.messages.fromFirstTurn() else page.messages
-            val joined = (if (full) rows.withNewestFull(page.messages) else null) ?: newest
-            saveCopy(id, joined, page.sessionId)
+        savedCopyRefreshMutex.withLock {
+            val id = _state.value.storedSessionId ?: return
+            if (!_state.value.historyRead) return
+            // A newer saved copy (from a history load) can land while the refresh reads the gateway.
+            val previousSave = historyMutex.withLock { saveJob }
+            val page = (sessions.messages(gateway, id, limit = HISTORY_PAGE, profile = profile) as? ApiResult.Success)?.value ?: return
+            historyMutex.withLock {
+                if (!_state.value.historyRead || _state.value.storedSessionId != id || saveJob !== previousSave) return
+                val full = page.messages.size >= HISTORY_PAGE
+                val newest = if (full) page.messages.fromFirstTurn() else page.messages
+                val joined = (if (full) rows.withNewestFull(page.messages) else null) ?: newest
+                saveCopy(id, joined, page.sessionId)
+            }
         }
     }
 
@@ -2820,10 +3008,17 @@ class ChatSession(
         // The running turn's saved steps apart from the reply before them, to fold into its live reply below.
         val stored = historyToMessages(rows, rowsSessionId, startedAt).withRisks(flagged)
         // A prompt sent without a reply that the transcript now has arrived after all.
-        val storedPrompts = stored.mapNotNullTo(HashSet()) { (it as? ChatMessage.User)?.text }
+        val storedPrompts = stored.mapNotNull { (it as? ChatMessage.User)?.text }
         // Only the gateway's transcript says a prompt arrived; the saved copy is from before it.
         val unsettled = if (savedCopyAt != null) live else {
-            live.filterNot { it is ChatMessage.User && it.check != null && storedPrompts.any { p -> p.contains(it.text) } }
+            live.filterNot { message ->
+                if (message !is ChatMessage.User || message.check == null) return@filterNot false
+                val prompt = unsettled[message.key]
+                // A reaction's follow-up can repeat an earlier one word for word: it arrived once the transcript
+                // holds one more copy than when it went.
+                if (prompt?.keepRejected == true) storedPrompts.count { it.contains(message.text) } > prompt.copiesBefore
+                else storedPrompts.any { it.contains(message.text) }
+            }
         }
         // Steps of the running turn are saved as it goes, and the live copy repeats them: show them once.
         val messages = (stored + unsettled).withSavedStepsFolded()
