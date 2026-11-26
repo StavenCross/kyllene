@@ -279,6 +279,7 @@ import dev.hermeskotlin.designsystem.rememberHoverIndication
 import dev.hermeskotlin.core.chat.Attachment
 import dev.hermeskotlin.core.chat.ChatMessage
 import dev.hermeskotlin.core.chat.TranscriptEvent
+import dev.hermeskotlin.core.chat.replyTextOrNull
 import dev.hermeskotlin.core.chat.GatewayNotice
 import dev.hermeskotlin.core.chat.ChatState
 import dev.hermeskotlin.core.chat.OutgoingAttachment
@@ -593,6 +594,10 @@ fun ChatScreen(
     val density = LocalDensity.current
     val modelPillBounds = remember { mutableStateOf<Rect?>(null) }
     val conversationKey = Triple(target.gateway.gatewayUrl, target.profile, target.storedSessionId)
+    val editing = viewModel.editing.collectAsStateWithLifecycle().value
+    val imagePaste = if (ownsTranscript && connected && keysEnabled && !dialogOpen && editing == null &&
+        attachments.size < OutgoingAttachment.MAX_COUNT
+    ) attachmentPicker.imagePasteModifier { read -> viewModel.pasteImages(target, read) } else Modifier
     Box(Modifier.fillMaxSize().onSizeChanged { paneWidth = with(density) { it.width.toDp() } }) {
     CompositionLocalProvider(LocalModelPillBounds provides modelPillBounds) {
     ChatView(
@@ -638,7 +643,7 @@ fun ChatScreen(
         notice = notice,
         actions = viewModel,
         widgetFiles = transcript.widgetFiles,
-        editing = viewModel.editing.collectAsStateWithLifecycle().value,
+        editing = editing,
         // Only for the chat it was taken for, not one the screen moved on to (a branch, a fresh start).
         readUpTo = readPosition?.readUpTo?.takeIf { state.storedSessionId == target.storedSessionId },
         onReadLatest = if (readPosition != null && ownsTranscript && screenShown && connected && state.historyRead && !state.running) {
@@ -673,6 +678,7 @@ fun ChatScreen(
         focusComposer = focusComposer,
         keysEnabled = keysEnabled && !dialogOpen,
         attachmentPicker = attachmentPicker.takeIf { isDesktop },
+        imagePaste = imagePaste,
         rail = railFile?.let { file ->
             {
                 FileViewer(file, onDismiss = { previewing = null }, load = viewModel::previewFile, download = viewModel::downloadFile, docked = true)
@@ -846,6 +852,7 @@ internal fun ChatView(
     keysEnabled: Boolean = true,
     /** Takes files dropped on the chat and pasted into it (the desktop's). */
     attachmentPicker: AttachmentPicker? = null,
+    imagePaste: Modifier = Modifier,
     /** A panel at the right, beside the conversation: the desktop's file rail. */
     rail: (@Composable () -> Unit)? = null,
 ) {
@@ -1279,6 +1286,7 @@ internal fun ChatView(
                         onOpenControl = onOpenControl,
                         voiceFull = voiceFull,
                         onExpandVoice = { voiceFolded = false },
+                        imagePaste = imagePaste,
                         onPasteFiles = { canAttach && keysEnabled && attachmentPicker?.pasteAttachments() == true },
                     )
                 }
@@ -1415,6 +1423,7 @@ private fun ColumnScope.Dock(
     /** The voice chat is open over the whole screen. */
     voiceFull: Boolean,
     onExpandVoice: () -> Unit,
+    imagePaste: Modifier,
     /** A paste in the composer: true when it attached files, a picture or a long text (the desktop's). */
     onPasteFiles: () -> Boolean = { false },
 ) {
@@ -1584,6 +1593,7 @@ private fun ColumnScope.Dock(
                 onAttach = onAttach,
                 onDictate = onDictate,
                 onVoiceChat = onVoiceChat,
+                imagePaste = imagePaste,
                 onKey = { event ->
                     // A bot named so far comes before "A file" / "A folder", which any short @ word offers too.
                     val listed = when {
@@ -1619,6 +1629,7 @@ private fun ComposerNotice.text(): String = when (this) {
     is ComposerNotice.Said -> text
     ComposerNotice.PromptNotSent -> stringResource(Res.string.chat_notice_prompt_not_sent)
     ComposerNotice.CallNotStarted -> stringResource(Res.string.chat_notice_call_not_started)
+    ComposerNotice.ImagePasteTimedOut -> stringResource(Res.string.android_attach_photo_failed)
     is ComposerNotice.TooManyAttachments -> stringResource(Res.string.chat_notice_too_many_files, max)
     is ComposerNotice.FileTooLarge -> stringResource(Res.string.chat_notice_file_too_large, name, megabytes)
 }
@@ -3358,8 +3369,9 @@ internal val ChatMessage.sentAt: Double?
 
 private fun ChatMessage.isNewerThan(readUpTo: Double): Boolean = when (this) {
     is ChatMessage.User -> (timestamp ?: return false) > readUpTo + UNREAD_SLACK_SECONDS
-    // A reply with no time yet is still being written, so it came after the last look.
-    is ChatMessage.Assistant -> (timestamp ?: Double.MAX_VALUE) > readUpTo + UNREAD_SLACK_SECONDS
+    // Anchor the line before the first streamed word. A finished silent reply no longer needs it.
+    is ChatMessage.Assistant -> (streaming || text.replyTextOrNull() != null) &&
+        (timestamp ?: Double.MAX_VALUE) > readUpTo + UNREAD_SLACK_SECONDS
     // Another bot writing in is news even when this bot stays silent. The machinery's own rows (deliveries,
     // routines, failures) aren't: the line goes above something the person would want to read.
     is ChatMessage.Event -> event is TranscriptEvent.FromBot && (timestamp ?: return false) > readUpTo + UNREAD_SLACK_SECONDS
@@ -4129,6 +4141,7 @@ private fun Composer(
     onVoiceChat: () -> Unit,
     /** A prompt is being edited: it can't go out mid-turn, as the gateway won't cut the chat while a task runs. */
     editing: Boolean,
+    imagePaste: Modifier,
     /** The desktop's keys in the field before its own: a paste that attaches, a suggestion picked. */
     onKey: (KeyEvent) -> Boolean = { false },
 ) {
@@ -4184,6 +4197,7 @@ private fun Composer(
                         state = actions.composer,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp).padding(horizontal = 12.dp).focusRequester(focus)
                             .onFocusChanged { fold.typing = it.hasFocus }
+                            .then(imagePaste)
                             .then(
                                 if (!enterSends) {
                                     Modifier
