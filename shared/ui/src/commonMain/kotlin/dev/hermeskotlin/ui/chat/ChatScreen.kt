@@ -3276,7 +3276,7 @@ internal fun MessageTimeLabel(epochSeconds: Double?, modifier: Modifier = Modifi
     val label = remember(epochSeconds, use24Hour) { messageTime(epochSeconds, use24Hour) }
     if (label.isEmpty()) return
     if (isDesktop) {
-        // The short label ("Mon 14:05") in full under the pointer, as desktop chat apps show it.
+        // The short label ("Mon 14:05") in full while the pointer rests on it, as desktop chat apps show it.
         val full = remember(epochSeconds, use24Hour) { fullMessageTime(epochSeconds, use24Hour) }
         Tooltip(full, modifier) { Text(label, style = Theme[typography][caption], color = Theme[colors][textTertiary]) }
     } else {
@@ -3323,7 +3323,8 @@ internal fun List<ChatMessage>.withoutBlankReplies(showReasoning: Boolean): List
 
 /**
  * The first message newer than [readUpTo] (epoch seconds) that the person would call new: a reply, a prompt
- * from elsewhere, or another bot's row. Messages without a time (a reply still streaming) count as new.
+ * from elsewhere, or another bot's row. A reply counts once it has words to read (not a silence or only tool steps);
+ * one without a time (still streaming) counts as new.
  * Null when every message is older, or when nothing in [messages] is new.
  */
 internal fun firstUnreadKey(messages: List<ChatMessage>, readUpTo: Double): String? =
