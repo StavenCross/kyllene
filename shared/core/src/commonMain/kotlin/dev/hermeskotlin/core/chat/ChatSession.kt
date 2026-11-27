@@ -8,6 +8,7 @@ import dev.hermeskotlin.core.network.ApiResult
 import dev.hermeskotlin.core.network.errorMessage
 import dev.hermeskotlin.core.rpc.GatewayEvent
 import dev.hermeskotlin.core.rpc.JsonRpcClient
+import dev.hermeskotlin.core.rpc.ResumeBoundary
 import dev.hermeskotlin.core.rpc.RpcException
 import dev.hermeskotlin.core.rpc.RpcTimeoutException
 import dev.hermeskotlin.core.sessions.SessionMessage
@@ -182,12 +183,11 @@ class ChatSession(
     /** Live events held back while the gap before them is filled; null when nothing is being caught up. */
     private var held: MutableList<GatewayEvent>? = null
 
-    /** Frames received after the gateway resumed a chat, while its transcript is still being read. */
-    private class PendingResume(val client: JsonRpcClient, val runtimeId: String) {
-        val events = mutableListOf<GatewayEvent>()
-    }
+    private class PendingResume(val client: JsonRpcClient, val boundary: ResumeBoundary = ResumeBoundary())
 
     private var pendingResume: PendingResume? = null
+    /** Old frames can still be queued in the collector when the new attachment is published. */
+    private var resumeReceiveOrder = 0L
 
     /** The socket waiting for a replay-gap resume to start. */
     private var pendingGapClient: JsonRpcClient? = null
@@ -2154,6 +2154,98 @@ class ChatSession(
     }
 
     /**
+     * Replaces the text of prompt [key], still queued behind the running turn, with [text]: `prompt.replace_queued` on
+     * a session authority that offers it for this prompt ([canEditQueued]). Like Hermes, the edited prompt goes to the
+     * back of the queue. A turn that took it first, or a gateway that can't, leaves it as it was, and says so in
+     * [ChatState.error]. A call that got no answer is sent again, on retry, with the same `submission_id`, so the
+     * gateway answers with the edit it may already have admitted instead of taking it twice. One the gateway took
+     * all the same shows once its `pending` lists the submission ([withPendingAdmissions]).
+     */
+    suspend fun replaceQueued(key: String, text: String): QueuedEditOutcome {
+        val trimmed = text.trim()
+        val state = _state.value
+        val prompt = state.messages.firstOrNull { it.key == key } as? ChatMessage.User
+        // Gone (a stop dropped the queue) is not started: it never ran, and its text came back with the stop.
+        if (prompt == null) {
+            _state.update { it.copy(error = "The queued message is no longer waiting, so it wasn't changed.") }
+            return QueuedEditOutcome.Failed
+        }
+        if (!prompt.queued) return queuedEditRefused(QueuedEditOutcome.Started)
+        if (trimmed.isEmpty() || trimmed == prompt.text) return QueuedEditOutcome.Failed
+        val admission = prompt.admissionId
+        val client = connectedClient()
+        val runtimeId = client?.let(::liveRuntimeId)
+        if (client == null || runtimeId == null) {
+            _state.update { it.copy(error = "Not connected to the gateway, so the queued message wasn't changed.") }
+            return QueuedEditOutcome.Failed
+        }
+        if (!client.sessionAuthority || admission == null || !state.canEditQueued(key)) {
+            return queuedEditRefused(QueuedEditOutcome.Unsupported)
+        }
+        val submission = state.unansweredQueuedEdits.entries
+            .firstOrNull { (_, edit) -> edit.replaced == admission && edit.text == trimmed }?.key ?: newRequestId()
+        // On its way, the prompt isn't offered for another edit, which would name the admission this one retires.
+        _state.update {
+            it.copy(
+                replacingAdmissions = it.replacingAdmissions + admission,
+                unansweredQueuedEdits = it.unansweredQueuedEdits + (submission to UnansweredQueuedEdit(key, admission, trimmed)),
+            )
+        }
+        val result = try {
+            client.request(
+                "prompt.replace_queued",
+                buildJsonObject {
+                    put("session_id", runtimeId)
+                    put("admission_id", admission)
+                    put("submission_id", submission)
+                    put("text", trimmed)
+                },
+            ) as? JsonObject
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RpcException) {
+            _state.update { it.copy(unansweredQueuedEdits = it.unansweredQueuedEdits - submission) }
+            return when {
+                e.code == METHOD_NOT_FOUND || e.reason == "unsupported_control" -> {
+                    _state.update { it.copy(replaceableAdmissions = it.replaceableAdmissions - admission) }
+                    queuedEditRefused(QueuedEditOutcome.Unsupported)
+                }
+                e.reason in QUEUED_EDIT_TOO_LATE -> queuedEditRefused(QueuedEditOutcome.Started)
+                else -> {
+                    _state.update { it.copy(error = e.message.ifBlank { "Couldn't change the queued message." }) }
+                    QueuedEditOutcome.Failed
+                }
+            }
+        } catch (e: Exception) {
+            // Out without a reply: the gateway may have taken it. Its `pending` naming the submission says it did.
+            val landed = _state.value.messages.any { it is ChatMessage.User && it.submissionId == submission && it.admissionId != admission }
+            if (landed) return QueuedEditOutcome.Replaced
+            _state.update { it.copy(error = "The gateway didn't answer, so the queued message may not have changed.") }
+            return QueuedEditOutcome.Failed
+        } finally {
+            _state.update { it.copy(replacingAdmissions = it.replacingAdmissions - admission) }
+        }
+        val admitted = result.string("admission_id")
+        _state.update { state ->
+            // Already shown if its `pending` came first: the prompt no longer holds [admission], so this changes nothing.
+            (if (admitted == null) state else state.withQueuedEdit(key, admission, trimmed, admitted, submission))
+                .copy(unansweredQueuedEdits = state.unansweredQueuedEdits - submission)
+        }
+        return if (admitted == null) QueuedEditOutcome.Failed else QueuedEditOutcome.Replaced
+    }
+
+    /** Says why an edit of a queued prompt didn't go, and returns [outcome]. */
+    private fun queuedEditRefused(outcome: QueuedEditOutcome): QueuedEditOutcome {
+        val message = when (outcome) {
+            QueuedEditOutcome.Started -> "Its turn had already started, so the message went as it was."
+            QueuedEditOutcome.Unsupported -> "This gateway can't change a queued message. Update Hermes to edit one."
+            else -> return outcome
+        }
+        _state.update { it.copy(error = message) }
+        return outcome
+    }
+
+    /**
      * Sends `session.steer` for [text]. The session authority takes the running turn's `execution_generation`
      * with it, and refuses the steer without one (gateway/session_busy_controls.py `correct`); other gateways
      * take only the id and the text, and refuse any other key. A generation that isn't known yet is read with
@@ -2543,11 +2635,9 @@ class ChatSession(
                 val runtimeId = event.sessionId ?: return@collect
                 val replayGap = streamMutex.withLock {
                     if (connectedClient() !== client) return@collect
-                    val pending = pendingResume
-                    if (pending?.client === client && pending.runtimeId == runtimeId) {
-                        pending.events += event
-                        return@collect
-                    }
+                    // The socket holds this resume's frames until the snapshot and transcript are in.
+                    if (pendingResume?.client === client) return@collect
+                    if (attachedClient === client && event.receiveOrder <= resumeReceiveOrder) return@collect
                     val live = liveRuntimeId(client)
                     if (live == null) {
                         gapHeld?.takeIf { gapRuntime == runtimeId }?.add(event)
@@ -2762,6 +2852,8 @@ class ChatSession(
         (event.executionGeneration ?: (event.payload as? JsonObject).long("execution_generation"))?.let { seen ->
             executionGeneration = maxOf(executionGeneration ?: seen, seen)
         }
+        // A queued prompt cancelled before it ran (an edit replaced it) ends no turn: the one running keeps its reply.
+        if (event.type == "message.complete" && event.isQueuedSettlement(_state.value.startedAdmissions)) return
         if (event.type == "session.info" || event.type == "session.updated") {
             val payload = event.payload as? JsonObject
             // A receipt names its session; only ever forward, as a replayed older one must not rewind it.
@@ -3123,7 +3215,10 @@ class ChatSession(
             resume(client, reconnected, afterGap)
         } finally {
             if (reconnected && !afterGap) withContext(NonCancellable) {
-                streamMutex.withLock { pendingResume = null }
+                streamMutex.withLock {
+                    pendingResume?.let { client.endResume(it.boundary) }
+                    pendingResume = null
+                }
             }
         }
     }
@@ -3131,16 +3226,19 @@ class ChatSession(
     private suspend fun resume(client: JsonRpcClient, reconnected: Boolean, afterGap: Boolean): String {
         val stored = _state.value.storedSessionId ?: error("No stored session to resume")
         _state.update { it.copy(attachment = Attachment.Attaching) }
-        val result = client.request(
-            "session.resume",
-            buildJsonObject {
-                put("session_id", stored)
-                profile?.let { put("profile", it) }
-                put("source", CLIENT_SOURCE)
-                put("cols", TERMINAL_COLUMNS)
-                put("omit_messages", true)
-            },
-        ) as? JsonObject ?: error("Empty session.resume reply")
+        val params = buildJsonObject {
+            put("session_id", stored)
+            profile?.let { put("profile", it) }
+            put("source", CLIENT_SOURCE)
+            put("cols", TERMINAL_COLUMNS)
+            put("omit_messages", true)
+        }
+        val pending = if (reconnected && !afterGap) streamMutex.withLock {
+            PendingResume(client).also { pendingResume = it }
+        } else null
+        val response = if (pending != null) client.resumeAtBoundary(params, pending.boundary)
+            else client.request("session.resume", params)
+        val result = response as? JsonObject ?: error("Empty session.resume reply")
         val runtimeId = result.string("session_id") ?: error("session.resume returned no session_id")
         executionGeneration = result.long("execution_generation")
         revision = result.long("revision")
@@ -3156,7 +3254,7 @@ class ChatSession(
         val (resumable, waiting) = streamMutex.withLock {
             if (connectedClient() !== client) throw StaleResume()
             if (!afterGap && (reconnected || attachedClient !== client)) resetReplayWork()
-            if (reconnected && !afterGap) pendingResume = PendingResume(client, runtimeId)
+            if (attachedClient !== client) resumeReceiveOrder = 0
             inflightText = streamed
             // Seqs count per runtime session and per epoch, so only the same of both can be picked up.
             val resumable = !afterGap && reconnected && lastSeq != null && runtimeId == seqRuntime && epoch != null && epoch == seqEpoch
@@ -3174,6 +3272,30 @@ class ChatSession(
             resumable to waiting
         }
         if (reconnected && (!resumable || (!_state.value.historyRead && !historyMutex.isLocked))) loadHistory()
+        if (connectedClient() !== client) throw StaleResume()
+        val receipt = pending?.boundary?.receipt
+        val early = receipt?.early.orEmpty()
+        val interruptedReplay = client.sessionAuthority && (
+            receipt?.overflow == true || early.any {
+                it.type == REPLAY_GAP || (epoch != null && it.replayEpoch != null && it.replayEpoch != epoch)
+            }
+        )
+        val beforeReply = when {
+            client.sessionAuthority -> {
+                val watermark = startSeq(client, result, epoch)
+                early.filter { event ->
+                    event.replayEpoch == epoch && watermark != null && (event.seq ?: 0) > watermark
+                }
+            }
+            // Picked up from the last seq: the catch-up orders these frames among the replayed ones, and applies them
+            // itself when the ring can't answer, so a newer turn can't be ended by an older completion.
+            running && resumable -> early
+            running && pending != null && early.lastOrNull()?.type == "message.complete" &&
+                (legacyReceiptEndsTurn(early.last(), result.double("turn_started_at")) ||
+                    legacyTurnEnded(client, result.string("session_key") ?: stored, runtimeId, pending.boundary)) ->
+                listOf(early.last())
+            else -> emptyList()
+        }
         if (connectedClient() !== client) throw StaleResume()
         var replyKey: String? = null
         // Named with the id it goes with, so no reader ever pairs this socket with the old id or the old socket with this one.
@@ -3197,6 +3319,7 @@ class ChatSession(
                 inputRequests = open.plusNew(claimUnclaimed(runtimeId)),
                 keySeq = state.keySeq + 1,
             ).withInfo(result["info"] as? JsonObject).withTodos(TodoList.parse(result["todo_state"] as? JsonObject))
+                .withPendingAdmissions(result["pending"])
                 // Opened without one (a branch on the session authority, whose `session.mutate` names no title).
                 .let { if (it.title.isNullOrBlank()) it.copy(title = (result["info"] as? JsonObject).string("title")?.takeIf(String::isNotBlank)) else it }
                 // Nothing runs, so the agent is built; its clear may have gone while this phone was away.
@@ -3217,10 +3340,16 @@ class ChatSession(
         }
         val replayGap = streamMutex.withLock {
             if (connectedClient() !== client) throw StaleResume()
-            val pending = pendingResume ?: return@withLock false
+            if (pending == null) return@withLock false
+            val handoff = client.endResume(pending.boundary)
+            if (connectedClient() !== client) throw StaleResume()
+            resumeReceiveOrder = handoff.receiveOrder
             pendingResume = null
-            if (client.sessionAuthority && pending.events.any { it.type == REPLAY_GAP }) true else {
-                pending.events.forEach(::deliver)
+            if (client.sessionAuthority && (interruptedReplay || handoff.events.any { it.type == REPLAY_GAP })) {
+                true
+            } else {
+                beforeReply.forEach(::deliver)
+                handoff.events.forEach(::deliver)
                 false
             }
         }
@@ -3236,6 +3365,40 @@ class ChatSession(
         }
         return runtimeId
     }
+
+    /** A committed reply made after the snapshot's start belongs to that turn or a later one. */
+    private suspend fun legacyReceiptEndsTurn(event: GatewayEvent, started: Double?): Boolean {
+        if (started == null) return false
+        val receipt = (event.payload as? JsonObject)?.get("persisted_turn") as? JsonObject
+        val id = receipt.long("final_assistant_row_id") ?: return false
+        return historyMutex.withLock { rows.any { it.id == id && it.role == "assistant" && (it.timestamp ?: 0.0) > started } }
+    }
+
+    /** The legacy gateway publishes completion before it clears running. Let that turn settle before checking again. */
+    private suspend fun legacyTurnEnded(
+        client: JsonRpcClient, stored: String, runtimeId: String, boundary: ResumeBoundary,
+    ): Boolean = withTimeoutOrNull(3_000) {
+        for (wait in LEGACY_END_RECHECK_DELAYS) {
+            if (wait > 0) delay(wait)
+            if (connectedClient() !== client) throw StaleResume()
+            if (boundary.hasLaterTurn) return@withTimeoutOrNull false
+            val result = try {
+                client.request("session.active_list") as? JsonObject
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@withTimeoutOrNull false
+            }
+            val row = (result?.get("sessions") as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+                .firstOrNull { it.string("id") == runtimeId && it.string("session_key") == stored }
+            when (row.string("status")) {
+                "idle" -> return@withTimeoutOrNull true
+                "working" -> continue
+                else -> return@withTimeoutOrNull false
+            }
+        }
+        false
+    } ?: false
 
     /** [withSavedStepsInLiveReply] for the running turn. */
     private fun List<ChatMessage>.withSavedStepsFolded(): List<ChatMessage> =
@@ -3298,6 +3461,7 @@ class ChatSession(
         if (client.sessionAuthority || !instruction.isNullOrBlank()) rowExists = true
         streamMutex.withLock {
             resetReplayWork()
+            resumeReceiveOrder = 0
             seqEpoch = replayEpoch(client, result)
             lastSeq = startSeq(client, result, seqEpoch)
             seqRuntime = runtimeId
@@ -3327,6 +3491,8 @@ class ChatSession(
     private companion object {
         /** The session authority's notice that it ended this socket's subscription to a session. */
         const val REPLAY_GAP = "session.replay_gap"
+
+        val LEGACY_END_RECHECK_DELAYS = listOf(0L, 350L, 1_000L)
 
         /** A message key made from a stored row (`historyToMessages`): `row-<id>`, or `row-<id>-<n>` for one of its events. */
         val ROW_KEY = Regex("row-(\\d+)(?:-\\d+)?")
@@ -3366,6 +3532,9 @@ class ChatSession(
 
         /** `session.steer`'s error for an agent without `steer()` (tui_gateway/methods_session_interrupt.py). */
         const val STEER_UNSUPPORTED = 4010
+
+        /** `prompt.replace_queued` refusals that mean the prompt left the queue first: its turn took it, or it's gone. */
+        val QUEUED_EDIT_TOO_LATE = setOf("admission_started", "not_found")
 
         /** How long Stop & send waits for the stopped turn's `message.complete` before queueing behind it. */
         const val STOP_SETTLE_TIMEOUT_MS = 10_000L

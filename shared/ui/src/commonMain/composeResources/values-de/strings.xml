@@ -112,6 +112,8 @@
     <string name="settings_show_pet_detail">Das Pet des Profils sitzt auf dem Eingabefeld und spielt nach, was der Agent tut. Mit /pet eins adoptieren.</string>
     <string name="settings_link_previews">Link-Vorschauen zeigen</string>
     <string name="settings_link_previews_detail">Eine Karte für jeden Weblink in einer fertigen Antwort. Kyllene öffnet die verlinkten Seiten und ihre Bilder selbst, ohne die Cookies deines Gateways.</string>
+    <string name="settings_open_web_links_in_browser">Weblinks im Standardbrowser öffnen</string>
+    <string name="settings_open_web_links_in_browser_detail">Öffne Links in deiner Browser-App statt in einem Tab über Kyllene.</string>
     <string name="settings_suggested_replies">Antwortvorschläge</string>
     <string name="settings_suggestions_what">Nach einer Antwort die Nachricht, die du wahrscheinlich als Nächstes senden würdest, über dem Eingabefeld: antippen, dann bearbeiten und senden. Sie kommt vom Next-Prompt-Plugin des Gateways, das pro Zug einmal ein Modell fragt.</string>
     <string name="settings_suggestions_what_desktop">Nach einer Antwort die Nachricht, die du wahrscheinlich als Nächstes senden würdest, über dem Eingabefeld: anklicken, dann bearbeiten und senden. Sie kommt vom Next-Prompt-Plugin des Gateways, das pro Zug einmal ein Modell fragt.</string>
@@ -180,6 +182,7 @@
     <string name="settings_join_discord_detail">Hilfe holen, Fehler melden, Funktionen vorschlagen und von neuen Versionen hören.</string>
     <string name="update_available">Version %1$s ist da</string>
     <string name="update_install_hint">Installiere sie über diese – Anmeldung und Einstellungen bleiben.</string>
+    <string name="update_release_history">Versionsverlauf</string>
     <string name="settings_check_sheet_detail">Jede Stufe wird einzeln geprüft.</string>
     <string name="start_instruction_what">Jeder neue Chat in Kyllene sagt dem Agenten das zuerst. Es bleibt aus dem Chat heraus, hier und in deinen anderen Hermes-Apps. Laufende Chats behalten, womit sie gestartet sind. Leer lassen für keine.</string>
     <string name="start_instruction_placeholder">Was soll jeder neue Chat wissen?</string>

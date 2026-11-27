@@ -112,6 +112,8 @@
     <string name="settings_show_pet_detail">A profil kis kedvence a beviteli mezőn ül, és eljátssza, mit csinál az ügynök. Fogadj örökbe egyet a /pet paranccsal.</string>
     <string name="settings_link_previews">Hivatkozás-előnézetek</string>
     <string name="settings_link_previews_detail">Egy kártya minden webes hivatkozáshoz egy befejezett válaszban. A Kyllene maga nyitja meg a hivatkozott oldalakat és képeiket, a Gateway sütijei nélkül.</string>
+    <string name="settings_open_web_links_in_browser">Webes hivatkozások megnyitása az alapértelmezett böngészőben</string>
+    <string name="settings_open_web_links_in_browser_detail">A hivatkozások a böngésződben nyílnak meg a Kyllene fölötti lap helyett.</string>
     <string name="settings_suggested_replies">Javasolt válaszok</string>
     <string name="settings_suggestions_what">Egy válasz után a beviteli mező fölött az az üzenet, amelyet valószínűleg következőnek küldenél: koppints rá, szerkeszd és küldd el. A Gateway Next Prompt bővítményétől jön, amely körönként egyszer megkérdez egy modellt.</string>
     <string name="settings_suggestions_what_desktop">Egy válasz után a beviteli mező fölött az az üzenet, amelyet valószínűleg következőnek küldenél: kattints rá, szerkeszd és küldd el. A Gateway Next Prompt bővítményétől jön, amely körönként egyszer megkérdez egy modellt.</string>
@@ -180,6 +182,7 @@
     <string name="settings_join_discord_detail">Kérj segítséget, jelents hibát, javasolj funkciót, és értesülj az új kiadásokról.</string>
     <string name="update_available">Megjelent az új verzió: %1$s</string>
     <string name="update_install_hint">Telepítsd erre rá; a bejelentkezésed és a beállításaid megmaradnak.</string>
+    <string name="update_release_history">Kiadási előzmények</string>
     <string name="settings_check_sheet_detail">Minden lépést külön tesztel.</string>
     <string name="start_instruction_what">Minden új csevegés, amelyet a Kyllene-ben kezdesz, ezt mondja el először az ügynöknek. A csevegésben nem jelenik meg, sem itt, sem a többi Hermes-alkalmazásodban. A már folyó csevegések megtartják, amivel indultak. Hagyd üresen, ha nem kell.</string>
     <string name="start_instruction_placeholder">Mit tudjon minden új csevegés?</string>
