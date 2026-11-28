@@ -648,7 +648,7 @@ internal fun SettingsView(
                     Divider()
                     NavRow(
                         title = stringResource(Res.string.settings_sidebar_pages),
-                        detail = sidebarPagesSummary(settings),
+                        detail = sidebarPagesSummary(settings, pushAvailable),
                         icon = Lucide.LayoutList,
                         onClick = onOpenSidebarPages,
                     )

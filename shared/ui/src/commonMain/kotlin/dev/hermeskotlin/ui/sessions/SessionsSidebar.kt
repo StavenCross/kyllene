@@ -223,6 +223,7 @@ import dev.hermeskotlin.core.profiles.Profile
 import dev.hermeskotlin.core.profiles.ProfileRoster
 import dev.hermeskotlin.core.projects.Project
 import dev.hermeskotlin.core.projects.ProjectIndex
+import dev.hermeskotlin.core.push.PushSetup
 import dev.hermeskotlin.core.sessions.SessionListFilter
 import dev.hermeskotlin.core.sessions.SessionSummary
 import androidx.compose.ui.text.font.FontWeight
@@ -413,7 +414,10 @@ fun SessionsSidebar(
     }
     /** A side picked by the switch, or for search or a page; without the switch the view stays where Settings put it. */
     val pickMode: (SidebarMode) -> Unit = { if (modeSwitch) bots.setMode(it) }
-    val navPages = remember(settings?.sidebarNav, settings?.sidebarNavHidden) { shownNavPages(settings, isDesktop) }
+    val pushAvailable = koinInject<PushSetup>().available
+    val navPages = remember(settings?.sidebarNav, settings?.sidebarNavHidden, pushAvailable) {
+        shownNavPages(settings, isDesktop, pushAvailable)
+    }
     var profilesOpen by remember { mutableStateOf(false) }
 
     var searchOpen by remember { mutableStateOf(false) }
@@ -750,7 +754,10 @@ fun SessionsSidebar(
                 val icon = navIcon(page)
                 val label = stringResource(navLabel(page))
                 when (page) {
-                    SidebarPage.Inbox -> NavLink(icon, label, badge = inboxUnread) { inboxOpen = true }
+                    SidebarPage.Inbox -> NavLink(icon, label, badge = inboxUnread, selected = pageInMain && inboxOpen) {
+                        closePages()
+                        inboxOpen = true
+                    }
                     SidebarPage.Scheduled -> NavLink(icon, label, selected = pageInMain && scheduledOpen) { closePages(); scheduledOpen = true }
                     SidebarPage.Insights -> NavLink(icon, label, selected = pageInMain && insightsOpen) { closePages(); insightsOpen = true }
                     SidebarPage.Capabilities -> NavLink(icon, label, selected = pageInMain && capabilitiesOpen) { closePages(); capabilitiesOpen = true }
@@ -1781,15 +1788,13 @@ internal val NAV_PAGES = listOf(
     SidebarPage.Archived,
 )
 
-/**
- * The pages that can have a button in the sidebar on [desktop] or a phone. The Inbox goes by a phone's push
- * registration (Notifications anywhere), which a desktop has none of, so it would only ever say it can't load.
- */
-internal fun navPages(desktop: Boolean): List<SidebarPage> = NAV_PAGES.filter { !(desktop && it == SidebarPage.Inbox) }
+/** The Inbox needs push registration, which only some desktop builds support. */
+internal fun navPages(desktop: Boolean, pushAvailable: Boolean = false): List<SidebarPage> =
+    NAV_PAGES.filter { it != SidebarPage.Inbox || !desktop || pushAvailable }
 
 /** The page buttons the sidebar shows, in order, as [settings] leave them; all of them before the settings are read. */
-internal fun shownNavPages(settings: AppSettings?, desktop: Boolean): List<SidebarPage> =
-    navPages(desktop).filter { settings?.showsSidebarPage(it.name) ?: true }
+internal fun shownNavPages(settings: AppSettings?, desktop: Boolean, pushAvailable: Boolean = false): List<SidebarPage> =
+    navPages(desktop, pushAvailable).filter { settings?.showsSidebarPage(it.name) ?: true }
 
 /** A sidebar page's icon, on its button and in Settings › Sidebar pages. */
 internal fun navIcon(page: SidebarPage): ImageVector = when (page) {

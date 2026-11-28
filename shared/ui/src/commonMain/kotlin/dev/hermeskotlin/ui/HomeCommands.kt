@@ -40,6 +40,7 @@ import com.composables.icons.lucide.Wrench
 import com.composeunstyled.Text
 import com.composeunstyled.theme.Theme
 import dev.hermeskotlin.core.bots.Bot
+import dev.hermeskotlin.core.push.PushSetup
 import dev.hermeskotlin.core.sessions.SessionSummary
 import dev.hermeskotlin.core.settings.ThemeMode
 import dev.hermeskotlin.designsystem.body
@@ -53,7 +54,9 @@ import dev.hermeskotlin.designsystem.textTertiary
 import dev.hermeskotlin.designsystem.typography
 import dev.hermeskotlin.ui.components.PaletteItem
 import dev.hermeskotlin.ui.resources.*
+import dev.hermeskotlin.ui.sessions.navPages
 import org.jetbrains.compose.resources.stringResource
+import org.koin.compose.koinInject
 
 /** What the command palette can reach from the signed-in home. A null action leaves its row out. */
 internal class HomeCommands(
@@ -106,12 +109,12 @@ internal fun paletteItems(
     val dark = stringResource(Res.string.app_theme_dark)
     val system = stringResource(Res.string.app_theme_system)
     val shortcuts = stringResource(Res.string.app_keyboard_shortcuts)
+    val inboxAvailable = SidebarPage.Inbox in navPages(isDesktop, koinInject<PushSetup>().available)
     return buildList {
         add(PaletteItem(go, newChat, Lucide.SquarePen, keysLabel("Ctrl+N"), "start", commands.newChat))
         add(PaletteItem(go, searchChats, Lucide.Search, keysLabel("Ctrl+Shift+F"), "find history") { commands.fire(Shortcut.SearchChats) })
         for ((page, icon, label) in pages) {
-            // The Inbox goes by a phone's push registration, which a desktop has none of.
-            if (page == SidebarPage.Inbox && isDesktop) continue
+            if (page == SidebarPage.Inbox && !inboxAvailable) continue
             // Without the switch the sidebar stays on the view picked in Settings, so neither side is a place to go.
             if (!modeSwitch && (page == SidebarPage.Chats || page == SidebarPage.Bots)) continue
             add(PaletteItem(go, label, icon, keywords = "sidebar page") { commands.fire(Shortcut.Go(page)) })
