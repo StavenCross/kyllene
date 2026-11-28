@@ -4,13 +4,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.composeunstyled.theme.ColorScheme
 import dev.hermeskotlin.core.chat.ChatMessage
@@ -22,6 +27,8 @@ import dev.hermeskotlin.ui.preview.PreviewChatActions
 import dev.hermeskotlin.ui.voice.DictationState
 import dev.hermeskotlin.ui.voice.VoiceChatState
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class TranscriptPreviewTest {
@@ -35,8 +42,18 @@ class TranscriptPreviewTest {
 
     @Test
     fun longReasoningOpensInTheDesktopRail() = runComposeUiTest {
-        setContent { TranscriptPreviewFixture(true, listOf(ChatMessage.Assistant("reply", reasoning = longOutput))) }
+        val pane = mutableStateOf(850.dp)
+        val messages = listOf(ChatMessage.Assistant("reply", reasoning = longOutput))
+        setContent { TranscriptPreviewFixture(true, messages, pane.value) }
         onNodeWithText("Reasoning").performClick()
+        val divider = onNodeWithContentDescription("Details panel width")
+        divider.performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(410f)) }
+        fun width() = divider.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current
+        assertEquals(410f, width())
+        runOnIdle { pane.value = 620.dp }
+        assertEquals(260f, width())
+        runOnIdle { pane.value = 850.dp }
+        assertEquals(410f, width())
         onNodeWithContentDescription("Close").assertIsDisplayed().performClick()
         onNodeWithText("Transcript preview fixture").assertIsDisplayed()
     }
@@ -87,10 +104,14 @@ class TranscriptPreviewTest {
 }
 
 @Composable
-private fun TranscriptPreviewFixture(desktop: Boolean, messages: List<ChatMessage>) {
+private fun TranscriptPreviewFixture(
+    desktop: Boolean,
+    messages: List<ChatMessage>,
+    width: Dp = if (desktop) 850.dp else 360.dp,
+) {
     HermesTheme(ColorScheme.Dark) {
         CompositionLocalProvider(LocalDesktopLayout provides desktop) {
-            Box(Modifier.size(if (desktop) 850.dp else 360.dp, 600.dp)) {
+            Box(Modifier.size(width, 600.dp)) {
                 ChatView(
                     title = "Transcript preview fixture",
                     state = ChatState(storedSessionId = "chat", historyLoaded = true, messages = messages),
