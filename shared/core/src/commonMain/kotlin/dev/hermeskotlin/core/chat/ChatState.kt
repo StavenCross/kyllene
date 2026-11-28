@@ -178,7 +178,14 @@ sealed interface ChatMessage {
         val failed: Boolean = false,
         /** The side task answering a `/btw` or `/bg`, whose `btw.complete` / `background.complete` fills [output] in. */
         val taskId: String? = null,
-    ) : ChatMessage
+        /** Identifies the same row across updates to its answer, within its current chat session. */
+        internal val rowIdentity: Any = Any(),
+    ) : ChatMessage {
+        val isSideTask: Boolean
+            get() = taskId != null || key.startsWith("side-") || command.startsWith("/btw ") || command.startsWith("/bg ")
+
+        val canDismiss: Boolean get() = !running && isSideTask
+    }
 }
 
 sealed interface Attachment {
@@ -191,6 +198,15 @@ sealed interface Attachment {
 
     data class Failed(val message: String) : Attachment
 }
+
+/**
+ * The live reply [replyKey]'s text from [offset] on is the response the model is writing now, the one after its last
+ * tool. `message.complete` sends that response again as its `text`, which fills in what didn't stream. [carried] is
+ * the start of that response that went into the reply a correction sealed above it, so it isn't shown twice.
+ * [toolOffset] is where the text after the last tool begins, so text added whole beside the calls since (which the
+ * final may repeat) is told from the segments before that tool.
+ */
+data class ResponseStart(val replyKey: String, val offset: Int, val carried: String = "", val toolOffset: Int = 0)
 
 data class ChatState(
     /** The durable `sessions` row id; null for a new chat until `session.create` answers. */
@@ -221,12 +237,15 @@ data class ChatState(
     /** An older page is being read. */
     val loadingOlder: Boolean = false,
     val messages: List<ChatMessage> = emptyList(),
+    internal val dismissedSideTaskIds: Set<String> = emptySet(),
     val attachment: Attachment = Attachment.Detached,
     val replyReactionsSupported: Boolean = true,
     /** A turn is running on the gateway (ours or one started elsewhere). */
     val running: Boolean = false,
     /** Transient `status.update` line while a turn runs. */
     val status: String? = null,
+    /** The `status.update` kind of [status] ("compacted", "process", …); null when the line came from elsewhere. */
+    val statusKind: String? = null,
     /** The latest `thinking.delta` spinner frame ("(⌐■_■) formulating..."), the TUI's live activity cue. */
     val thinkingFrame: String? = null,
     /** Session-level failure outside a turn (`error` event, failed send). */
@@ -254,8 +273,22 @@ data class ChatState(
      * ("queued") is read after its own turn began isn't marked queued.
      */
     val startedAdmissions: List<String> = emptyList(),
+    /**
+     * The session authority's queued admissions it offers `replace` for (`prompt.replace_queued`), from the `pending`
+     * of its latest `session.info` or `session.resume`. An owner older than that verb lists none, so none is editable.
+     */
+    val replaceableAdmissions: Set<String> = emptySet(),
+    /** The queued admissions whose `prompt.replace_queued` is on its way: not offered for another edit meanwhile. */
+    val replacingAdmissions: Set<String> = emptySet(),
+    /**
+     * Edits of queued prompts sent with no answer yet (or none coming), by their `submission_id`. The gateway's
+     * `pending` lists a replacement it took under that id as its `input_id`, which shows the edit as made.
+     */
+    val unansweredQueuedEdits: Map<String, UnansweredQueuedEdit> = emptyMap(),
     /** The session's goal, loop and heartbeat, null when it has none (`session.control.update`). */
     val control: SessionControl? = null,
+    /** Where the running reply's current response (the text after its last tool) begins; null when unknown. */
+    val responseStart: ResponseStart? = null,
     /** Source of unique keys for messages created on this device. */
     val keySeq: Int = 0,
 ) {

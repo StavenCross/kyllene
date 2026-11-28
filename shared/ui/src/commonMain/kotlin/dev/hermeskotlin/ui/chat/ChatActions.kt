@@ -92,6 +92,12 @@ interface ChatActions {
      */
     fun startEdit(key: String)
 
+    /**
+     * Puts prompt [key], still queued behind the running turn, in the composer to change it; the next send changes it
+     * where it waits, cutting nothing. Only where the gateway [offers that][dev.hermeskotlin.core.chat.canEditQueued].
+     */
+    fun startQueuedEdit(key: String) {}
+
     fun cancelEdit()
 
     /** Looks in the transcript again for a prompt whose delivery is unknown. */
@@ -118,6 +124,9 @@ interface ChatActions {
 
     /** Hides the gateway notice with [key] (its ×). */
     fun dismissNotice(key: String) {}
+
+    /** Hides the finished side-task card the user tapped. */
+    fun dismissSideCard(card: ChatMessage.Command) {}
 
     fun dismissAttachmentError()
 

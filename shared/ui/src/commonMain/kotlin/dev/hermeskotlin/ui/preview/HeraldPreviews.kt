@@ -115,14 +115,15 @@ import dev.hermeskotlin.ui.sessions.ProjectActionsSheet
 import dev.hermeskotlin.ui.sessions.NewProjectDialog
 import dev.hermeskotlin.ui.settings.AppIconScreen
 import dev.hermeskotlin.ui.settings.ConnectedDevicesView
+import dev.hermeskotlin.ui.settings.CreditsView
 import dev.hermeskotlin.ui.settings.ConnectionCheckSheet
 import dev.hermeskotlin.ui.settings.GatewayInfo
 import dev.hermeskotlin.ui.settings.SettingsView
 import dev.hermeskotlin.ui.settings.StartInstructionView
 import dev.hermeskotlin.ui.settings.SidebarPagesView
 import dev.hermeskotlin.ui.SidebarPage
-import dev.hermeskotlin.ui.update.LocalRenameOffer
-import dev.hermeskotlin.ui.update.RenameOffer
+import dev.hermeskotlin.ui.update.LocalSupportOffer
+import dev.hermeskotlin.ui.update.SupportOffer
 import androidx.compose.ui.tooling.preview.Preview
 import com.composeunstyled.theme.ColorScheme
 import dev.hermeskotlin.core.chat.ChatState
@@ -161,13 +162,14 @@ enum class PreviewScene(val label: String) {
     NewChat("A new chat"),
     Sidebar("The sessions sidebar"),
     SidebarProfiles("The sidebar's profile menu"),
-    Renamed("The sidebar after updating from Herald, with the rename card"),
+    SupportCard("The sidebar asking once for a star or a tip"),
     Bots("The bots and rooms"),
     Room("A room of bots"),
     NewRoom("A new room"),
     BotEditor("Editing a bot"),
     Settings("Settings"),
     AppIcons("The app icons"),
+    Credits("Contributors and supporters"),
     StartInstruction("The starting instruction for new chats"),
     ConnectedDevices("Connected devices: the Pebble and its prompts"),
     SidebarPages("The sidebar's page buttons, a few hidden"),
@@ -225,6 +227,7 @@ enum class PreviewScene(val label: String) {
     Connect("Connecting to a gateway that answered"),
     ConnectFailed("A gateway that didn't answer"),
     SignIn("Signing in"),
+    SignInRestricted("A browser sign-in waiting with battery usage Restricted"),
 }
 
 /**
@@ -277,6 +280,18 @@ fun HeraldPreview(scene: PreviewScene, dark: Boolean = true, accent: String = DE
                         projects = ChatSamples.projects,
                     )
                 }
+                PreviewScene.SupportCard -> OpenSidebar {
+                    CompositionLocalProvider(LocalSupportOffer provides SupportOffer(show = true) {}) {
+                        SessionsSidebarSample(
+                            ChatSamples.sessions(),
+                            selectedId = "s1",
+                            userLabel = ChatSamples.USER,
+                            statuses = ChatSamples.sessionStatuses,
+                            drafts = ChatSamples.sessionDrafts,
+                            projects = ChatSamples.projects,
+                        )
+                    }
+                }
                 PreviewScene.SidebarProfiles -> OpenSidebar {
                     SessionsSidebarSample(
                         ChatSamples.sessions(),
@@ -288,19 +303,8 @@ fun HeraldPreview(scene: PreviewScene, dark: Boolean = true, accent: String = DE
                         profileMenuOpen = true,
                     )
                 }
-                PreviewScene.Renamed -> OpenSidebar {
-                    CompositionLocalProvider(LocalRenameOffer provides RenameOffer(show = true) {}) {
-                        SessionsSidebarSample(
-                            ChatSamples.sessions(),
-                            selectedId = "s1",
-                            userLabel = ChatSamples.USER,
-                            statuses = ChatSamples.sessionStatuses,
-                            drafts = ChatSamples.sessionDrafts,
-                            projects = ChatSamples.projects,
-                        )
-                    }
-                }
                 PreviewScene.AppIcons -> AppIconScreen(onBack = {})
+                PreviewScene.Credits -> CreditsView(onBack = {})
                 PreviewScene.Threads -> OpenSidebar {
                     SessionsSidebarSample(
                         ChatSamples.threadSessions(),
@@ -437,6 +441,23 @@ fun HeraldPreview(scene: PreviewScene, dark: Boolean = true, accent: String = DE
                     onCancelBrowser = {},
                     onChangeGateway = {},
                 )
+                PreviewScene.SignInRestricted -> SignInView(
+                    host = "hermes.example.ts.net",
+                    notice = null,
+                    state = SignInUiState(
+                        signingIn = true,
+                        waitingForBrowser = true,
+                        batteryRestricted = true,
+                        methods = SignInMethods(password = false, browser = true),
+                    ),
+                    username = remember { TextFieldState() },
+                    password = remember { TextFieldState() },
+                    onSignIn = {},
+                    onSignInWithBrowser = {},
+                    onCancelBrowser = {},
+                    onChangeGateway = {},
+                    onBatterySettings = {},
+                )
                 PreviewScene.Loading -> OpenSidebar {
                     SidebarPage { InsightsView(InsightsUiState(), onBack = {}, onSelectPeriod = {}, onRetry = {}) }
                 }
@@ -569,6 +590,8 @@ fun HeraldPreview(scene: PreviewScene, dark: Boolean = true, accent: String = DE
                             name = remember { TextFieldState(PageSamples.JOB_NAME) },
                             deliveryTargets = PageSamples.deliveryTargets,
                             onSetDeliver = {},
+                            onPickModel = {},
+                            onClearModel = {},
                             onSave = {},
                             onClose = {},
                         )
@@ -855,6 +878,10 @@ private fun NewChatNarrowLightPreview() = HeraldPreview(PreviewScene.NewChat, da
 @Composable
 private fun SidebarPreview() = HeraldPreview(PreviewScene.Sidebar)
 
+@Preview(widthDp = 360, heightDp = 800)
+@Composable
+private fun SupportCardNarrowLightPreview() = HeraldPreview(PreviewScene.SupportCard, dark = false)
+
 @Preview(widthDp = 412, heightDp = 892)
 @Composable
 private fun SidebarProfilesPreview() = HeraldPreview(PreviewScene.SidebarProfiles)
@@ -882,6 +909,10 @@ private fun ConnectedDevicesPreview() = HeraldPreview(PreviewScene.ConnectedDevi
 @Preview(widthDp = 412, heightDp = 892)
 @Composable
 private fun SidebarPagesPreview() = HeraldPreview(PreviewScene.SidebarPages)
+
+@Preview(widthDp = 412, heightDp = 892)
+@Composable
+private fun CreditsPreview() = HeraldPreview(PreviewScene.Credits)
 
 @Preview(widthDp = 412, heightDp = 892)
 @Composable
@@ -958,6 +989,10 @@ private fun ConnectFailedPreview() = HeraldPreview(PreviewScene.ConnectFailed)
 @Preview(widthDp = 412, heightDp = 892)
 @Composable
 private fun SignInPreview() = HeraldPreview(PreviewScene.SignIn)
+
+@Preview(widthDp = 360, heightDp = 780)
+@Composable
+private fun SignInRestrictedPreview() = HeraldPreview(PreviewScene.SignInRestricted)
 
 /** The welcome screen after a test of [address] came back with [result]. */
 @Composable

@@ -21,6 +21,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -48,6 +49,30 @@ class GatewayConnectionTest {
         assertEquals("T", usedTicket)
         assertEquals("e1", connected.ready["replay_epoch"].toString().trim('"'))
         connection.stop()
+    }
+
+    @Test
+    fun connectedGatewayTracksTheSocketAcrossGatewaySwitches() = runTest {
+        val second = GatewayUrl.parse("https://other.example")
+        val firstSocket = FakeTransport()
+        val secondSocket = FakeTransport()
+        val connection = GatewayConnection(
+            auth(), { gateway, _ -> if (gateway == url) firstSocket else secondSocket }, backgroundScope,
+        )
+        connection.start(url)
+        firstSocket.push(FakeTransport.READY)
+        connection.state.first { it is ConnectionState.Connected }
+        assertTrue(connection.isConnectedTo(url.value))
+        assertFalse(connection.isConnectedTo(second.value))
+
+        connection.start(second)
+        assertFalse(connection.isConnectedTo(url.value))
+        assertFalse(connection.isConnectedTo(second.value))
+        secondSocket.push(FakeTransport.READY)
+        val connected = assertIs<ConnectionState.Connected>(connection.state.first { it is ConnectionState.Connected })
+        assertEquals(second, connected.gateway)
+        assertTrue(connection.isConnectedTo(second.value))
+        assertFalse(connection.isConnectedTo(url.value))
     }
 
     @Test
@@ -99,6 +124,18 @@ class GatewayConnectionTest {
         val failed = assertIs<ConnectionState.Failed>(connection.state.first { it is ConnectionState.Failed })
         assertEquals(1, attempts)
         assertTrue("Cloudflare Access" in failed.reason)
+    }
+
+    @Test
+    fun aMissingChatEndpointPointsAtTheProxy() = runTest {
+        val connection = GatewayConnection(
+            auth(),
+            { _, _ -> throw HandshakeRejectedException(404, IllegalStateException("Expected HTTP 101 response but was '404 Not Found'")) },
+            backgroundScope,
+        )
+        connection.start(url)
+        val failed = assertIs<ConnectionState.Failed>(connection.state.first { it is ConnectionState.Failed })
+        assertEquals("This dashboard has no chat endpoint (/api/ws). Check that the proxy forwards /api/ws.", failed.reason)
     }
 
     @Test
