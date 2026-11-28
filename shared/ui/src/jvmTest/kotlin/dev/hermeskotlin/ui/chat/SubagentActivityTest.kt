@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.composeunstyled.theme.ColorScheme
 import dev.hermeskotlin.core.chat.ChatMessage
@@ -60,6 +62,10 @@ class SubagentActivityTest {
         val reply = onNodeWithText("The audit is complete.").assertIsDisplayed().getUnclippedBoundsInRoot()
         val details = onNodeWithText("Subagent transcript").assertIsDisplayed().getUnclippedBoundsInRoot()
         assertTrue(details.left > reply.right, "The transcript should open to the right of the chat")
+        onNodeWithContentDescription("Details panel width").performSemanticsAction(SemanticsActions.SetProgress) {
+            assertTrue(it(420f))
+        }
+        assertTrue(onNodeWithText("Subagent transcript").getUnclippedBoundsInRoot().left < details.left)
     }
 
     @Test
