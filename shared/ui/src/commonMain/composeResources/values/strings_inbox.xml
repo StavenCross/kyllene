@@ -72,7 +72,7 @@
     </plurals>
     <string name="inbox_failed_runs">Failed runs</string>
     <string name="inbox_open_failed_runs">Open failed runs</string>
-    <string name="inbox_needs_push">The Inbox needs Notifications anywhere, which tells the gateway which phone this is.</string>
+    <string name="inbox_needs_push">The Inbox needs Notifications anywhere, which tells the gateway which device this is.</string>
     <string name="inbox_needs_plugin">The gateway’s herald-push plugin needs %1$s for the Inbox. Update it in Settings.</string>
     <string name="inbox_open_settings">Open Settings</string>
     <string name="inbox_loading">Loading…</string>

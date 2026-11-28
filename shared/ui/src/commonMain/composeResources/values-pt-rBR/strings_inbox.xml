@@ -68,7 +68,7 @@
     </plurals>
     <string name="inbox_failed_runs">Execuções com falha</string>
     <string name="inbox_open_failed_runs">Abrir execuções com falha</string>
-    <string name="inbox_needs_push">A caixa de entrada precisa de Notificações em qualquer lugar, que diz ao Gateway qual celular é este.</string>
+    <string name="inbox_needs_push">A caixa de entrada precisa de Notificações em qualquer lugar, que diz ao Gateway qual dispositivo é este.</string>
     <string name="inbox_needs_plugin">O plugin herald-push do Gateway precisa da versão %1$s para a caixa de entrada. Atualize-o nas Configurações.</string>
     <string name="inbox_open_settings">Abrir Configurações</string>
     <string name="inbox_loading">Carregando…</string>

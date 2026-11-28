@@ -68,7 +68,7 @@
     </plurals>
     <string name="inbox_failed_runs">Ejecuciones fallidas</string>
     <string name="inbox_open_failed_runs">Abrir ejecuciones fallidas</string>
-    <string name="inbox_needs_push">La bandeja de entrada necesita Notificaciones en cualquier lugar, que le dice al Gateway qué teléfono es este.</string>
+    <string name="inbox_needs_push">La bandeja de entrada necesita Notificaciones en cualquier lugar, que le dice al Gateway qué dispositivo es este.</string>
     <string name="inbox_needs_plugin">La bandeja de entrada necesita la versión %1$s del plugin herald-push del Gateway. Actualízalo en Ajustes.</string>
     <string name="inbox_open_settings">Abrir Ajustes</string>
     <string name="inbox_loading">Cargando…</string>

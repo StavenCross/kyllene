@@ -68,7 +68,7 @@
     </plurals>
     <string name="inbox_failed_runs">Fehlgeschlagene Läufe</string>
     <string name="inbox_open_failed_runs">Fehlgeschlagene Läufe öffnen</string>
-    <string name="inbox_needs_push">Der Posteingang braucht „Überall benachrichtigen“, damit das Gateway weiß, welches Telefon das hier ist.</string>
+    <string name="inbox_needs_push">Der Posteingang braucht „Überall benachrichtigen“, damit das Gateway weiß, welches Gerät das hier ist.</string>
     <string name="inbox_needs_plugin">Das herald-push-Plugin des Gateways braucht %1$s für den Posteingang. Aktualisiere es in den Einstellungen.</string>
     <string name="inbox_open_settings">Einstellungen öffnen</string>
     <string name="inbox_loading">Wird geladen…</string>

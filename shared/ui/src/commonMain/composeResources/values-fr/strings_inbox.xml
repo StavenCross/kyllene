@@ -68,7 +68,7 @@
     </plurals>
     <string name="inbox_failed_runs">Exécutions en échec</string>
     <string name="inbox_open_failed_runs">Ouvrir les exécutions en échec</string>
-    <string name="inbox_needs_push">La boîte de réception a besoin de Notifications partout, qui indique au Gateway de quel téléphone il s’agit.</string>
+    <string name="inbox_needs_push">La boîte de réception a besoin de Notifications partout, qui indique au Gateway de quel appareil il s’agit.</string>
     <string name="inbox_needs_plugin">Le plugin herald-push du Gateway doit être en version %1$s pour la boîte de réception. Mettez-le à jour dans Paramètres.</string>
     <string name="inbox_open_settings">Ouvrir les paramètres</string>
     <string name="inbox_loading">Chargement…</string>

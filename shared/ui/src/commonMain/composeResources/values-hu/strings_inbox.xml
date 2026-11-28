@@ -68,7 +68,7 @@
     </plurals>
     <string name="inbox_failed_runs">Sikertelen futások</string>
     <string name="inbox_open_failed_runs">Sikertelen futások megnyitása</string>
-    <string name="inbox_needs_push">A beérkezett üzenetekhez kell az „Értesítések bárhol”, ez mondja meg a Gateway-nek, melyik telefon ez.</string>
+    <string name="inbox_needs_push">A beérkezett üzenetekhez kell az „Értesítések bárhol”, ez mondja meg a Gateway-nek, melyik eszköz ez.</string>
     <string name="inbox_needs_plugin">A beérkezett üzenetekhez a Gateway herald-push bővítményéből %1$s kell. Frissítsd a Beállításokban.</string>
     <string name="inbox_open_settings">Beállítások megnyitása</string>
     <string name="inbox_loading">Betöltés…</string>

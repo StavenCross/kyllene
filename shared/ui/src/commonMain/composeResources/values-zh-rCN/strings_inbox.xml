@@ -60,7 +60,7 @@
     </plurals>
     <string name="inbox_failed_runs">失败的运行</string>
     <string name="inbox_open_failed_runs">打开失败的运行</string>
-    <string name="inbox_needs_push">收件箱需要开启“随处通知”，它会告诉网关这是哪部手机。</string>
+    <string name="inbox_needs_push">收件箱需要开启“随处通知”，它会告诉网关这是哪台设备。</string>
     <string name="inbox_needs_plugin">收件箱需要网关的 herald-push 插件 %1$s。请在设置中更新。</string>
     <string name="inbox_open_settings">打开设置</string>
     <string name="inbox_loading">正在加载…</string>
