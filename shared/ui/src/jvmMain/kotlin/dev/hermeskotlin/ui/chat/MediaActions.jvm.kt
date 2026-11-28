@@ -103,8 +103,13 @@ internal suspend fun openStagedFile(
     }
 }
 
-private fun stagedFileName(name: String): String {
-    val basename = name.substringAfterLast('/').substringAfterLast('\\').filterNot(Char::isISOControl)
+internal fun stagedFileName(name: String, windows: Boolean = System.getProperty("os.name").startsWith("Windows")): String {
+    var basename = name.substringAfterLast('/').substringAfterLast('\\').filterNot(Char::isISOControl)
+    // Windows can't write these characters, trailing dots or spaces, or a device name such as CON.
+    if (windows) {
+        basename = basename.map { if (it in "<>:\"|?*") '_' else it }.joinToString("").trimEnd('.', ' ')
+        if (basename.substringBefore('.').uppercase().matches(Regex("CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]"))) basename = "_$basename"
+    }
     if (basename.isNotBlank() && basename != "." && basename != ".." && basename.toByteArray().size <= 255) return basename
     val extension = basename.substringAfterLast('.', "").takeIf { it.matches(Regex("[A-Za-z0-9]{1,16}")) }
     return extension?.let { "attachment.$it" } ?: "attachment"
