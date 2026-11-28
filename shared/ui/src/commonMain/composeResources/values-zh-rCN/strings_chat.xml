@@ -56,6 +56,7 @@
     </plurals>
     <string name="chat_table_more">更多内容在完整文件中</string>
     <string name="chat_file_open_failed">无法打开 %1$s</string>
+    <string name="chat_file_open_timed_out">打开 %1$s 超时</string>
     <string name="chat_file_no_preview">此文件无法预览</string>
     <string name="chat_file_no_preview_type">%1$s 文件无法预览</string>
     <string name="chat_file_save_hint">保存到手机，或分享给能打开它的应用。</string>

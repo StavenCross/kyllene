@@ -66,6 +66,7 @@
     </plurals>
     <string name="chat_table_more">more in the full file</string>
     <string name="chat_file_open_failed">Couldn’t open %1$s</string>
+    <string name="chat_file_open_timed_out">Opening %1$s timed out</string>
     <string name="chat_file_no_preview">No preview for this file</string>
     <string name="chat_file_no_preview_type">No preview for %1$s files</string>
     <string name="chat_file_save_hint">Save it to the phone, or share it to an app that opens it.</string>

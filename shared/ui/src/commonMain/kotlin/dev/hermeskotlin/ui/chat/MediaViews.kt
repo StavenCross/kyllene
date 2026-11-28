@@ -267,7 +267,7 @@ internal fun ReplyFile(item: ReplyMedia, download: (suspend () -> FileDownload)?
             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Spinner(Modifier.size(18.dp)) }
         } else {
             IconButton(Lucide.Download, contentDescription = stringResource(Res.string.chat_save_named, item.name), onClick = { withBytes { notify(actions.save(it, item.name)) } })
-            IconButton(shareIcon, contentDescription = shareNamed(item.name), onClick = { withBytes { actions.share(it, item.name) } })
+            IconButton(shareIcon, contentDescription = shareNamed(item.name), onClick = { withBytes { actions.shareFailure(it, item.name)?.let(notify) } })
         }
     }
 }
@@ -277,7 +277,7 @@ internal val LocalNotice = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 /** Full-screen picture with pinch-zoom (double-tap resets), Save and Share. */
 @Composable
-internal fun ImageViewer(image: ViewerImage, onDismiss: () -> Unit) {
+internal fun ImageViewer(image: ViewerImage, onDismiss: () -> Unit) = key(image) {
     val load = LocalMediaLoader.current
     val actions = rememberMediaActions()
     val scope = rememberCoroutineScope()
@@ -296,7 +296,8 @@ internal fun ImageViewer(image: ViewerImage, onDismiss: () -> Unit) {
             if (value == null) failed = getString(Res.string.chat_picture_load_failed)
         }
     }
-    var notice by remember { mutableStateOf<String?>(null) }
+    var notice by remember(image) { mutableStateOf<String?>(null) }
+    var opening by remember(image) { mutableStateOf(false) }
     LaunchedEffect(notice) {
         if (notice != null) {
             delay(2_500)
@@ -369,8 +370,20 @@ internal fun ImageViewer(image: ViewerImage, onDismiss: () -> Unit) {
                 IconButton(
                     shareIcon,
                     contentDescription = shareText(),
-                    onClick = { ready?.let { actions.share(it, image.name.withImageExtension(it)) } },
-                    enabled = ready != null,
+                    onClick = {
+                        if (ready != null && !opening) {
+                            notice = null
+                            opening = true
+                            scope.launch {
+                                try {
+                                    notice = actions.shareFailure(ready, image.name.withImageExtension(ready))
+                                } finally {
+                                    opening = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = ready != null && !opening,
                     tint = Color.White,
                 )
             }
