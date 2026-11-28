@@ -28,6 +28,7 @@ import dev.hermeskotlin.designsystem.bodySmall
 import dev.hermeskotlin.designsystem.colors
 import dev.hermeskotlin.designsystem.components.halo
 import dev.hermeskotlin.designsystem.textTertiary
+import dev.hermeskotlin.core.push.PushSetup
 import dev.hermeskotlin.designsystem.typography
 import dev.hermeskotlin.ui.PlatformBackHandler
 import dev.hermeskotlin.ui.isDesktop
@@ -39,12 +40,13 @@ import dev.hermeskotlin.ui.sessions.navPages
 import dev.hermeskotlin.ui.sessions.shownNavPages
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import org.koin.compose.koinInject
 
 /** Settings › Sidebar pages, over the settings page: which page buttons the sidebar has above the chats. */
 @Composable
 fun SidebarPagesScreen(settings: AppSettings, onUpdate: ((AppSettings) -> AppSettings) -> Unit, onBack: () -> Unit) {
     PlatformBackHandler(enabled = true, onBack = onBack)
-    SidebarPagesView(settings, onUpdate, onBack)
+    SidebarPagesView(settings, onUpdate, onBack, pushAvailable = koinInject<PushSetup>().available)
 }
 
 /** The page itself, stateless so previews can draw it. */
@@ -54,6 +56,7 @@ internal fun SidebarPagesView(
     onUpdate: ((AppSettings) -> AppSettings) -> Unit,
     onBack: () -> Unit,
     desktop: Boolean = isDesktop,
+    pushAvailable: Boolean = false,
 ) {
     Box(
         Modifier
@@ -87,7 +90,7 @@ internal fun SidebarPagesView(
                 }
                 if (settings.sidebarNav) {
                     Section(stringResource(Res.string.settings_sidebar_pages_each)) {
-                        navPages(desktop).forEachIndexed { i, page ->
+                        navPages(desktop, pushAvailable).forEachIndexed { i, page ->
                             if (i > 0) Divider()
                             SwitchRow(
                                 title = stringResource(navLabel(page)),
@@ -106,9 +109,9 @@ internal fun SidebarPagesView(
 
 /** The Sidebar pages row's line in Settings: all of them, none, or how many of them show. */
 @Composable
-internal fun sidebarPagesSummary(settings: AppSettings, desktop: Boolean = isDesktop): String {
-    val all = navPages(desktop).size
-    val shown = shownNavPages(settings, desktop).size
+internal fun sidebarPagesSummary(settings: AppSettings, pushAvailable: Boolean): String {
+    val all = navPages(isDesktop, pushAvailable).size
+    val shown = shownNavPages(settings, isDesktop, pushAvailable).size
     return when (shown) {
         0 -> stringResource(Res.string.settings_sidebar_pages_off)
         all -> stringResource(Res.string.settings_sidebar_pages_all)
