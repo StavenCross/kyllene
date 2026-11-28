@@ -202,9 +202,6 @@
     <string name="wallpaper_not_an_image">该文件不是 Kyllene 能读取的图片。</string>
     <string name="wallpaper_read_failed">无法读取该图片。</string>
 
-    <string name="update_renamed">Herald 现已更名为 Kyllene</string>
-    <string name="update_renamed_detail">同一个应用，换了新名字和新图标。你的登录、对话和设置都会保留。</string>
-    <string name="update_got_it">知道了</string>
 
     <string name="gateways_title">网关</string>
     <string name="gateways_detail">每个网关都是一个独立的 Hermes，有自己的配置和对话。</string>
@@ -290,6 +287,8 @@
     <string name="signin_with_browser">用浏览器登录</string>
     <string name="signin_waiting_browser">正在等待浏览器…</string>
     <string name="signin_finish_in_browser">在打开的页面中完成登录。完成后 Kyllene 会自动返回。</string>
+    <string name="signin_battery_restricted">Kyllene 的电池用量设为“受限”，因此 Android 不允许浏览器把登录交回给 Kyllene。请允许后台使用，然后回到这里。</string>
+    <string name="signin_battery_settings">电池设置</string>
     <string name="signin_different_gateway">使用其他网关</string>
     <string name="signin_gateway_chip">网关 %1$s</string>
     <string name="signin_or">或</string>
@@ -343,7 +342,8 @@
     <string name="check_fix_wait_a_minute">请等一分钟再试。</string>
     <string name="check_fix_sign_in_or_update">请重新登录；如果仍然失败，请更新 Hermes。</string>
     <string name="check_fix_update_hermes_try_again">请更新 Hermes 后再试。</string>
-    <string name="check_fix_update_hermes">请在服务器上更新 Hermes。</string>
+    <string name="hermes_unsupported_version">Kyllene 需要 Hermes Agent 0.22 或更高版本。请运行 `hermes update`。</string>
+    <string name="check_fix_proxy_forwards_ws">请检查代理是否转发 /api/ws。</string>
     <string name="check_fix_agent_running">检查服务器上的代理网关是否在运行。如果在代理之后，请放行 /api/ws 上的 WebSocket 升级。</string>
     <string name="check_fix_exact_address">请使用控制台配置的确切地址，并检查内嵌对话是否已开启。</string>
     <string name="check_fix_access_token_or_proxy">如果在 Cloudflare Access 之后，请为此网关添加服务令牌。否则请检查代理是否转发 /api/ws。</string>

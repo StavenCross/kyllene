@@ -112,6 +112,32 @@ class ReplyMarkTest {
     }
 
     @Test
+    fun aReplyArrivingWithAnOlderPageIsNewsWhenThePartAlreadyLoadedChanged() {
+        // The part loaded holds no prompt, so the page above, which brings it, changes the mark.
+        val loaded = listOf(ChatMessage.Assistant("row-11", text = "Checking."))
+        val away = ReplySeen("row-11", loaded.replyMark()).next(away = true, "row-11", loaded.replyMark())
+        val older = listOf(ChatMessage.User("row-10", "What changed?"))
+        // The page above only: the part already loaded is as it was.
+        val paged = older + loaded
+        assertNotEquals(away.mark, paged.replyMark())
+        assertFalse(away.next(away = true, "row-10", paged.replyMark(), paged.replyArrivedWithPage(loaded, away.mark)).new)
+        // The page above and more of the reply in the same update.
+        val replied = paged + ChatMessage.Assistant("live-1", text = "Two files changed.", streaming = true)
+        assertTrue(away.next(away = true, "row-10", replied.replyMark(), replied.replyArrivedWithPage(loaded, away.mark)).new)
+    }
+
+    @Test
+    fun aReplyArrivingWithAnOlderPageThatFoldsTheOldestBubbleIsNews() {
+        // History can fold the first loaded bubble into an older row, so its key is gone once the page is in.
+        val loaded = listOf(ChatMessage.Assistant("row-60", text = "Done."))
+        val away = ReplySeen("row-60", loaded.replyMark()).next(away = true, "row-60", loaded.replyMark())
+        val whole = listOf(ChatMessage.User("row-1", "What changed?"), ChatMessage.Assistant("row-2", text = "Checking.\n\nDone."))
+        assertFalse(away.next(away = true, "row-1", whole.replyMark(), whole.replyArrivedWithPage(loaded, away.mark)).new)
+        val replied = whole + ChatMessage.Assistant("live-1", text = "And", streaming = true)
+        assertTrue(away.next(away = true, "row-1", replied.replyMark(), replied.replyArrivedWithPage(loaded, away.mark)).new)
+    }
+
+    @Test
     fun aReplyThatComesAsTheChatsOwnPromptIsStoredIsNews() {
         // A chat begun here keeps its local prompt until the transcript is read again, e.g. on reconnecting.
         val live = listOf(ChatMessage.User("local-0", "What changed?"), ChatMessage.Assistant("live-1", reasoning = "Thinking", streaming = true))
@@ -143,5 +169,25 @@ class ReplyMarkTest {
         val command = ChatMessage.Command("c1", "/status", running = true)
         val ran = listOf(prompt, ChatMessage.Assistant("a1", text = "Done"), command)
         assertNotEquals(ran.replyMark(), listOf(prompt, ChatMessage.Assistant("a1", text = "Done"), command.copy(output = "ok", running = false)).replyMark())
+    }
+
+    @Test
+    fun dismissingASideCardWhileAwayIsNotANewReply() {
+        val reply = ChatMessage.Assistant("a1", text = "Done")
+        val card = ChatMessage.Command("side-1", "/btw which file?", output = "notes.txt", running = false, taskId = "btw_1")
+        val withCard = listOf(prompt, reply, card)
+        val away = ReplySeen(prompt.key, withCard.replyMark()).next(away = true, prompt.key, withCard.replyMark())
+
+        val dismissed = listOf(prompt, reply)
+        assertTrue(dismissed.onlyDismissedSideCardsFrom(withCard))
+        val afterDismiss = away.next(away = true, prompt.key, dismissed.replyMark(), onlyDismissedCards = dismissed.onlyDismissedSideCardsFrom(withCard))
+        assertFalse(afterDismiss.new)
+
+        // A real reply afterwards still counts as news, as does one arriving in the same update as a dismissal.
+        val replied = dismissed + ChatMessage.Assistant("a2", text = "Next answer")
+        assertFalse(replied.onlyDismissedSideCardsFrom(dismissed))
+        assertTrue(afterDismiss.next(away = true, prompt.key, replied.replyMark(), onlyDismissedCards = replied.onlyDismissedSideCardsFrom(dismissed)).new)
+        assertFalse(replied.onlyDismissedSideCardsFrom(withCard))
+        assertTrue(away.next(away = true, prompt.key, replied.replyMark(), onlyDismissedCards = replied.onlyDismissedSideCardsFrom(withCard)).new)
     }
 }

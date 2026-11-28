@@ -205,9 +205,6 @@
     <string name="wallpaper_not_an_image">Diese Datei ist kein Bild, das Kyllene lesen kann.</string>
     <string name="wallpaper_read_failed">Das Bild konnte nicht gelesen werden.</string>
 
-    <string name="update_renamed">Aus Herald wird Kyllene</string>
-    <string name="update_renamed_detail">Dieselbe App mit neuem Namen und Icon. Deine Anmeldung, Chats und Einstellungen bleiben.</string>
-    <string name="update_got_it">Verstanden</string>
 
     <string name="gateways_title">Gateways</string>
     <string name="gateways_detail">Jedes Gateway ist ein eigenes Hermes, mit eigenen Profilen und Chats.</string>
@@ -293,6 +290,8 @@
     <string name="signin_with_browser">Mit Browser anmelden</string>
     <string name="signin_waiting_browser">Warte auf den Browser…</string>
     <string name="signin_finish_in_browser">Schließ die Anmeldung auf der geöffneten Seite ab. Kyllene kommt danach von selbst zurück.</string>
+    <string name="signin_battery_restricted">Die Akkunutzung von Kyllene ist auf „Eingeschränkt“ gestellt, deshalb lässt Android den Browser die Anmeldung nicht zurückgeben. Erlaube die Nutzung im Hintergrund und komm dann hierher zurück.</string>
+    <string name="signin_battery_settings">Akku-Einstellungen</string>
     <string name="signin_different_gateway">Anderes Gateway nutzen</string>
     <string name="signin_gateway_chip">Gateway %1$s</string>
     <string name="signin_or">oder</string>
@@ -346,7 +345,8 @@
     <string name="check_fix_wait_a_minute">Warte eine Minute und versuch es dann erneut.</string>
     <string name="check_fix_sign_in_or_update">Melde dich erneut an; scheitert es weiter, aktualisiere Hermes.</string>
     <string name="check_fix_update_hermes_try_again">Aktualisiere Hermes und versuch es dann erneut.</string>
-    <string name="check_fix_update_hermes">Aktualisiere Hermes auf dem Server.</string>
+    <string name="hermes_unsupported_version">Kyllene braucht Hermes Agent 0.22 oder neuer. Führe `hermes update` aus.</string>
+    <string name="check_fix_proxy_forwards_ws">Prüfe, ob der Proxy /api/ws weiterleitet.</string>
     <string name="check_fix_agent_running">Prüfe, ob das Agent-Gateway auf dem Server läuft. Hinter einem Proxy: Erlaube WebSocket-Upgrades auf /api/ws.</string>
     <string name="check_fix_exact_address">Nutze genau die Adresse, für die das Dashboard eingerichtet ist, und prüfe, ob der eingebettete Chat aktiv ist.</string>
     <string name="check_fix_access_token_or_proxy">Hinter Cloudflare Access: Füge ein Service-Token für dieses Gateway hinzu. Sonst prüfe, ob der Proxy /api/ws weiterleitet.</string>

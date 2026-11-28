@@ -55,6 +55,7 @@ kotlin {
             implementation(libs.a2ui.material3)
             implementation(libs.androidx.material3)
             implementation(libs.coil.compose)
+            implementation(libs.coil.gif)
             implementation(libs.coil.network.okhttp)
             implementation(libs.media3.exoplayer)
             implementation(libs.media3.ui)
@@ -102,4 +103,8 @@ compose.resources {
 // `-Drtl.geometry=<dir>` asks the RTL layout tests to write their geometry and pixels there.
 providers.systemProperty("rtl.geometry").orNull?.let { dir ->
     tasks.withType<Test>().configureEach { systemProperty("rtl.geometry", dir) }
+}
+
+tasks.withType<Test>().configureEach {
+    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
 }

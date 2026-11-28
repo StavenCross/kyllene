@@ -9,9 +9,11 @@ import dev.hermeskotlin.core.rpc.json
 import dev.hermeskotlin.core.rpc.param
 import dev.hermeskotlin.core.sessions.SessionMessage
 import dev.hermeskotlin.core.sessions.SessionsApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -34,6 +36,7 @@ class ChatSessionResumeTest {
 
     /** Every transcript read, as `limit/offset`. */
     private val reads = mutableListOf<String>()
+    private var beforeRead: suspend () -> Unit = {}
 
     private fun rowsUpTo(last: Int) = (1..last).map { id ->
         if (id % 2 == 1) """{"id":$id,"role":"user","content":"p$id"}""" else """{"id":$id,"role":"assistant","content":"a$id"}"""
@@ -60,6 +63,7 @@ class ChatSessionResumeTest {
                 val limit = request.url.parameters["limit"]!!.toInt()
                 val offset = request.url.parameters["offset"]?.toInt() ?: 0
                 reads += "$limit/$offset"
+                beforeRead()
                 // order=latest: the offset and limit count back from the newest row.
                 val page = transcript.reversed().drop(offset).take(limit).reversed()
                 json("""{"session_id":"stored-1","messages":[${page.joinToString(",")}]}""")
@@ -70,8 +74,8 @@ class ChatSessionResumeTest {
         return gateway.connection to gateway.sockets
     }
 
-    private fun event(type: String, seq: Long?, payload: String = "{}") =
-        """{"jsonrpc":"2.0","method":"event","params":{"type":"$type","session_id":"rt1",${seq?.let { "\"seq\":$it," } ?: ""}"payload":$payload}}"""
+    private fun event(type: String, seq: Long?, payload: String = "{}", runtime: String = "rt1") =
+        """{"jsonrpc":"2.0","method":"event","params":{"type":"$type","session_id":"$runtime",${seq?.let { "\"seq\":$it," } ?: ""}"payload":$payload}}"""
 
     private fun delta(seq: Long, text: String) = event("message.delta", seq, """{"text":"$text"}""")
 
@@ -109,6 +113,76 @@ class ChatSessionResumeTest {
         first.serverClose(1006)
         chat.state.first { it.runtimeSessionId == null }
         return chat to transports
+    }
+
+    private suspend fun pauseNextHistory(): CompletableDeferred<Unit> {
+        val reading = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        beforeRead = {
+            beforeRead = {}
+            reading.complete(Unit)
+            release.await()
+        }
+        reading.await()
+        return release
+    }
+
+    @Test
+    fun aCompletionDuringReconnectHistoryClearsTheLiveReply() = runTest {
+        val (chat, sockets) = droppedMidTurn(
+            backgroundScope,
+            """{"session_id":"rt2","running":true,"inflight":{"assistant":"Partial"}}""",
+        )
+        val release = pauseNextHistory()
+
+        // An unrelated session's completion must stay out of this chat.
+        sockets.last().push(event("message.complete", null, """{"text":"Other reply","status":"complete"}""", "other"))
+        sockets.last().push(event("message.delta", 1, """{"text":" reply"}""", "rt2"))
+        sockets.last().push(event("message.complete", 2, """{"text":"Final answer","status":"complete"}""", "rt2"))
+        runCurrent()
+        transcript = rowsUpTo(3) + """{"id":4,"role":"assistant","content":"Final answer"}"""
+        release.complete(Unit)
+        runCurrent()
+
+        val state = chat.state.value
+        assertEquals("rt2", state.runtimeSessionId)
+        assertFalse(state.running)
+        assertEquals(listOf("a2", "Final answer"), state.messages.filterIsInstance<ChatMessage.Assistant>().map { it.text })
+    }
+
+    @Test
+    fun deltasDuringReconnectHistoryKeepTheirOrder() = runTest {
+        val (chat, sockets) = droppedMidTurn(
+            backgroundScope,
+            """{"session_id":"rt2","running":true,"inflight":{"assistant":"Hel"}}""",
+        )
+        val release = pauseNextHistory()
+        sockets.last().push(event("message.delta", 1, """{"text":"lo"}""", "rt2"))
+        sockets.last().push(event("message.delta", 1, """{"text":"lo"}""", "rt2"))
+        sockets.last().push(event("message.delta", 2, """{"text":" world"}""", "rt2"))
+        runCurrent()
+        release.complete(Unit)
+        runCurrent()
+        assertEquals("Hello world", chat.state.value.reply()?.text)
+        assertTrue(chat.state.value.running)
+    }
+
+    @Test
+    fun aSecondDisconnectDiscardsTheAbandonedResumesEvents() = runTest {
+        val (chat, sockets) = droppedMidTurn(
+            backgroundScope,
+            """{"session_id":"rt2","running":true,"inflight":{"assistant":"Hel"}}""",
+        )
+        val release = pauseNextHistory()
+        val abandoned = sockets.last()
+        abandoned.push(event("message.complete", 1, """{"text":"Stale completion","status":"complete"}""", "rt2"))
+        runCurrent()
+        abandoned.serverClose(1006)
+        chat.state.first { it.attachment is Attachment.Detached }
+        release.complete(Unit)
+        chat.state.first { sockets.size == 3 && it.runtimeSessionId == "rt2" }
+        assertTrue(chat.state.value.running)
+        assertFalse(chat.state.value.messages.any { (it as? ChatMessage.Assistant)?.text == "Stale completion" })
     }
 
     /** A turn that started at 100 (gateway clock) and saved its first step, text and a tool call, at [at]. */
@@ -280,7 +354,7 @@ class ChatSessionResumeTest {
         answer = { _, method, _ ->
             when (method) {
                 "session.resume" -> if (resumes++ == 0) midTurn("Running it. First I need the address.") else """{"session_id":"rt2","running":false}"""
-                "session.events.since" -> "error:-32601"
+                "session.events.since" -> since(latest = 99, truncated = true)
                 else -> "{}"
             }
         }
@@ -378,6 +452,11 @@ class ChatSessionResumeTest {
             "Checking.Done." to emptyList(),
             "Earlier.Checking.\n\nDone." to emptyList(),
             "Earlier.Checking.Done." to emptyList(),
+            "Earlier. Checking. Done." to emptyList(),
+            "Earlier.\nChecking.\n\nDone." to emptyList(),
+            "Earlier. Checking. CI is green." to emptyList(),
+            "Earlier. Checking. 3 suites ran." to emptyList(),
+            "e.g. checking. Done." to listOf("Checking."),
             "Checking.com" to listOf("Checking."),
             "Checking.COM" to listOf("Checking."),
             "See https://example.Checking.Com/path" to listOf("Checking."),
@@ -393,6 +472,17 @@ class ChatSessionResumeTest {
             assertEquals(text, reply.text)
             assertEquals(expected, reply.commentary, text)
         }
+    }
+
+    @Test
+    fun savedCommentaryTheStreamAlreadyShowsIsntRepeated() {
+        // The stream had it as reply text (message.interim), spaced and line-ended its own way.
+        val saved = ChatMessage.Assistant("s1", commentary = listOf("Step one.\r\n\r\nStep two.", "Not streamed yet."), timestamp = 101.0)
+        val live = ChatMessage.Assistant("live-0", text = "Looking. Step one.\n\nStep two.\n\nStill going.", streaming = true)
+
+        val reply = (listOf(saved, live).withSavedStepsInLiveReply(100.0, "Looking.", turnReplyKey = "live-0").single()) as ChatMessage.Assistant
+
+        assertEquals(listOf("Not streamed yet."), reply.commentary)
     }
 
     @Test
@@ -584,8 +674,8 @@ class ChatSessionResumeTest {
     }
 
     @Test
-    fun aGatewayWithoutReplayReloadsAsBefore() = runTest {
-        answer = { _, method, _ -> if (method == "session.events.since") "error:-32601" else "{}" }
+    fun aGapTheRingCantFillReloadsAsBefore() = runTest {
+        answer = { _, method, _ -> if (method == "session.events.since") since(latest = 99, truncated = true) else "{}" }
         val (chat, _) = droppedMidTurn(
             backgroundScope,
             resume = """{"session_id":"rt1","running":true,"inflight":{"assistant":"Hello"}}""",
@@ -601,7 +691,7 @@ class ChatSessionResumeTest {
             """{"id":4,"role":"assistant","content":"Hello","timestamp":105,""" +
                 """"tool_calls":[{"id":"t1","type":"function","function":{"name":"terminal","arguments":"{}"}}]}""",
         )
-        answer = { _, method, _ -> if (method == "session.events.since") "error:-32601" else "{}" }
+        answer = { _, method, _ -> if (method == "session.events.since") since(latest = 99, truncated = true) else "{}" }
         val (chat, _) = droppedMidTurn(
             backgroundScope,
             resume = """{"session_id":"rt1","running":true,"turn_started_at":100,"inflight":{"assistant":"Hello wor"}}""",
@@ -696,6 +786,60 @@ class ChatSessionResumeTest {
 
         assertEquals("Hello", chat.state.first { it.reply()?.text == "Hello" }.reply()?.text)
         assertEquals("2", transports.last().sent.value.first { it.isCall("session.events.since") }.param("last_seen"))
+    }
+
+    /**
+     * A chat created here running its own turn: a segment, then a tool, streamed (seqs 1-4). [since] answers
+     * `session.events.since`.
+     */
+    private suspend fun ownTurnPastATool(scope: CoroutineScope, since: String): Pair<ChatSession, FakeTransport> {
+        answer = { _, method, _ ->
+            when (method) {
+                "session.create" -> """{"session_id":"rt1","stored_session_id":"stored-1","info":{}}"""
+                "prompt.submit" -> """{"status":"streaming"}"""
+                "session.events.since" -> since
+                else -> "{}"
+            }
+        }
+        val (connection, transports) = connect(scope)
+        connection.state.first { it is ConnectionState.Connected }
+        val chat = ChatSession(url, null, null, connection, SessionsApi(scope.client()), scope)
+        chat.start()
+        assertTrue(chat.send("hi"))
+        val socket = transports.last()
+        socket.push(event("message.start", 1))
+        socket.push(delta(2, "Looking it up."))
+        socket.push(event("tool.start", 3, """{"tool_id":"t1","name":"terminal","context":"ls"}"""))
+        socket.push(event("tool.complete", 4, """{"tool_id":"t1","name":"terminal","summary":"ok"}"""))
+        chat.state.first { s -> s.messages.any { it is ChatMessage.Assistant && it.tools.any { t -> t.id == "t1" && !t.running } } }
+        return chat to socket
+    }
+
+    @Test
+    fun aFinalWhoseDeltasFellInAGapTheRingCantFillStillShows() = runTest {
+        // The final response's deltas (seqs 5-7) never arrive and can't be replayed; only the turn's end does.
+        val (chat, socket) = ownTurnPastATool(backgroundScope, since(latest = 99, truncated = true))
+
+        socket.push(event("message.complete", 8, """{"text":"Found it.","status":"complete"}"""))
+
+        val done = chat.state.first { !it.running && it.replies("Found it.").isNotEmpty() }
+        val reply = done.replies("Found it.").single()
+        assertEquals("Looking it up.\n\nFound it.", reply.text)
+        assertEquals(listOf("t1"), reply.tools.map { it.id })
+    }
+
+    @Test
+    fun aFinalMissedWhileOutOfSightShowsWhenTheTurnEnds() = runTest {
+        // Back in sight mid-turn, the replay fails, so the reply goes on from what showed; the final never streamed here.
+        val (chat, socket) = ownTurnPastATool(backgroundScope, since(latest = 99, truncated = true))
+
+        chat.resync()
+        socket.awaitSent { it.isCall("session.events.since") }
+        testScheduler.runCurrent()
+        socket.push(event("message.complete", 9, """{"text":"Found it.","status":"complete"}"""))
+
+        val done = chat.state.first { !it.running && it.replies("Found it.").isNotEmpty() }
+        assertEquals("Looking it up.\n\nFound it.", done.replies("Found it.").single().text)
     }
 
     @Test
@@ -805,8 +949,8 @@ class ChatSessionResumeTest {
     }
 
     @Test
-    fun comingBackInSightMidTurnOnAGatewayWithoutReplayKeepsTheReply() = runTest {
-        answer = { _, method, _ -> if (method == "session.events.since") "error:-32601" else "{}" }
+    fun comingBackInSightMidTurnWithoutAReplayKeepsTheReply() = runTest {
+        answer = { _, method, _ -> if (method == "session.events.since") since(latest = 99, truncated = true) else "{}" }
         val (chat, socket) = streamingHel(backgroundScope)
         // The turn starting read the transcript again; that read is done before counting.
         testScheduler.runCurrent()
