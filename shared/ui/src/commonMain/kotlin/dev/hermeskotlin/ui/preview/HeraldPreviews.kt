@@ -676,6 +676,7 @@ fun HeraldPreview(scene: PreviewScene, dark: Boolean = true, accent: String = DE
                     settings = AppSettings(sidebarNavHidden = listOf(SidebarPage.Insights.name, SidebarPage.Config.name)),
                     onUpdate = {},
                     onBack = {},
+                    pushAvailable = true,
                 )
                 PreviewScene.ConnectionCheck -> Box(Modifier.fillMaxSize()) {
                     SettingsView(

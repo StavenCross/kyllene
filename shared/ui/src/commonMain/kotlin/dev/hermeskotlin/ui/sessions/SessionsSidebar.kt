@@ -630,13 +630,7 @@ fun SessionsSidebar(
             // A page from the palette, in place of whatever the sidebar shows. Left to the app too, as search is.
             is Shortcut.Go -> false.also {
                 if (searchOpen) closeSearch()
-                scheduledOpen = false
-                inboxOpen = false
-                routinesOf = null
-                capabilitiesOpen = false
-                configOpen = false
-                pluginsOpen = false
-                insightsOpen = false
+                closePages()
                 if (state.filter != SessionListFilter.Recent) viewModel.setFilter(SessionListFilter.Recent)
                 when (shortcut.page) {
                     SidebarPage.Chats -> pickMode(SidebarMode.Chats)

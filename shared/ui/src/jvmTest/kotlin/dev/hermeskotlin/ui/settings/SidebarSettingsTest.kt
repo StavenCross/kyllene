@@ -14,6 +14,8 @@ import com.composeunstyled.theme.ColorScheme
 import dev.hermeskotlin.core.bots.SidebarMode
 import dev.hermeskotlin.core.settings.AppSettings
 import dev.hermeskotlin.designsystem.HermesTheme
+import dev.hermeskotlin.ui.preview.HeraldPreview
+import dev.hermeskotlin.ui.preview.PreviewScene
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -54,6 +56,12 @@ class SidebarSettingsTest {
         }
         onNodeWithText("Scheduled").performScrollTo().assertIsOn()
         onNodeWithText("Inbox").assertDoesNotExist()
+    }
+
+    @Test
+    fun desktopPreviewShowsTheInboxSwitch() = runComposeUiTest {
+        setContent { HeraldPreview(PreviewScene.SidebarPages) }
+        onNodeWithText("Inbox").performScrollTo().assertIsOn()
     }
 
     @Test

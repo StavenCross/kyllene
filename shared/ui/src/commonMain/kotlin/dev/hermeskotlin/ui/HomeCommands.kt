@@ -85,6 +85,7 @@ internal fun paletteItems(
     commands: HomeCommands,
     /** The sidebar has its Chats / Bots switch; without it, it shows only the view picked in Settings. */
     modeSwitch: Boolean = true,
+    pushAvailable: Boolean = koinInject<PushSetup>().available,
 ): List<PaletteItem> {
     val go = stringResource(Res.string.app_palette_go_to)
     val chat = stringResource(Res.string.app_palette_this_chat)
@@ -109,7 +110,7 @@ internal fun paletteItems(
     val dark = stringResource(Res.string.app_theme_dark)
     val system = stringResource(Res.string.app_theme_system)
     val shortcuts = stringResource(Res.string.app_keyboard_shortcuts)
-    val inboxAvailable = SidebarPage.Inbox in navPages(isDesktop, koinInject<PushSetup>().available)
+    val inboxAvailable = SidebarPage.Inbox in navPages(isDesktop, pushAvailable)
     return buildList {
         add(PaletteItem(go, newChat, Lucide.SquarePen, keysLabel("Ctrl+N"), "start", commands.newChat))
         add(PaletteItem(go, searchChats, Lucide.Search, keysLabel("Ctrl+Shift+F"), "find history") { commands.fire(Shortcut.SearchChats) })
