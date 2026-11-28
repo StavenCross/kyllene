@@ -135,13 +135,13 @@
     <string name="inbox_save_failed">Impossible d’enregistrer.</string>
     <string name="inbox_save_unknown">Impossible de savoir si c’est enregistré. %1$s</string>
     <string name="inbox_plugin_too_old">Le plugin herald-push du Gateway est trop ancien pour la boîte de réception.</string>
-    <string name="inbox_following_failed">Impossible de lire ce que suit ce téléphone.</string>
-    <string name="inbox_following_offline">Connectez-vous au Gateway pour voir ce que suit ce téléphone.</string>
+    <string name="inbox_following_failed">Impossible de lire ce que suit cet appareil.</string>
+    <string name="inbox_following_offline">Connectez-vous au Gateway pour voir ce que suit cet appareil.</string>
     <string name="inbox_change_offline">Connectez-vous au Gateway pour modifier ceci.</string>
     <string name="inbox_jobs_load_failed">Impossible de charger les tâches.</string>
     <string name="inbox_report_not_here_phone">Ce rapport n’est pas sur le téléphone. Il est peut-être plus loin dans la liste.</string>
     <string name="inbox_report_not_here_computer">Ce rapport n’est pas sur l’ordinateur. Il est peut-être plus loin dans la liste.</string>
-    <string name="inbox_ask_offline">Connectez-vous au Gateway pour poser une question sur ce rapport : seul son début est sur le téléphone.</string>
+    <string name="inbox_ask_offline">Connectez-vous au Gateway pour poser une question sur ce rapport : seul son début est sur cet appareil.</string>
     <string name="inbox_ask_gone">Le Gateway n’a plus ce rapport : vous ne pouvez poser de question que sur son début.</string>
     <string name="inbox_ask_failed">Impossible d’obtenir le rapport complet du Gateway. Réessayez dans un instant.</string>
     <string name="inbox_copied_start_offline">Début du rapport copié : connectez-vous au Gateway pour la suite.</string>

@@ -135,13 +135,13 @@
     <string name="inbox_save_failed">Nem sikerült menteni.</string>
     <string name="inbox_save_unknown">Nem tudni, mentve lett-e. %1$s</string>
     <string name="inbox_plugin_too_old">A Gateway herald-push bővítménye túl régi a beérkezett üzenetekhez.</string>
-    <string name="inbox_following_failed">Nem sikerült beolvasni, mit követ ez a telefon.</string>
-    <string name="inbox_following_offline">Csatlakozz a Gateway-hez, hogy lásd, mit követ ez a telefon.</string>
+    <string name="inbox_following_failed">Nem sikerült beolvasni, mit követ ez az eszköz.</string>
+    <string name="inbox_following_offline">Csatlakozz a Gateway-hez, hogy lásd, mit követ ez az eszköz.</string>
     <string name="inbox_change_offline">Csatlakozz a Gateway-hez, hogy ezt módosítsd.</string>
     <string name="inbox_jobs_load_failed">Nem sikerült betölteni a feladatokat.</string>
     <string name="inbox_report_not_here_phone">Ez a jelentés nincs a telefonon. Lehet, hogy lejjebb van a listában.</string>
     <string name="inbox_report_not_here_computer">Ez a jelentés nincs a számítógépen. Lehet, hogy lejjebb van a listában.</string>
-    <string name="inbox_ask_offline">Csatlakozz a Gateway-hez, hogy kérdezz erről a jelentésről: csak az eleje van a telefonon.</string>
+    <string name="inbox_ask_offline">Csatlakozz a Gateway-hez, hogy kérdezz erről a jelentésről: csak az eleje van ezen az eszközön.</string>
     <string name="inbox_ask_gone">A Gateway-en már nincs meg ez a jelentés, így csak az elejéről kérdezhetsz.</string>
     <string name="inbox_ask_failed">Nem sikerült a teljes jelentést lekérni a Gateway-ről. Próbáld újra egy kicsit később.</string>
     <string name="inbox_copied_start_offline">A jelentés eleje kimásolva: a többihez csatlakozz a Gateway-hez.</string>

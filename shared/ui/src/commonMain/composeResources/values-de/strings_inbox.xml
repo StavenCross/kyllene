@@ -135,13 +135,13 @@
     <string name="inbox_save_failed">Konnte nicht gespeichert werden.</string>
     <string name="inbox_save_unknown">Unklar, ob das gespeichert wurde. %1$s</string>
     <string name="inbox_plugin_too_old">Das herald-push-Plugin des Gateways ist zu alt für den Posteingang.</string>
-    <string name="inbox_following_failed">Konnte nicht lesen, was dieses Telefon verfolgt.</string>
-    <string name="inbox_following_offline">Verbinde dich mit dem Gateway, um zu sehen, was dieses Telefon verfolgt.</string>
+    <string name="inbox_following_failed">Konnte nicht lesen, was dieses Gerät verfolgt.</string>
+    <string name="inbox_following_offline">Verbinde dich mit dem Gateway, um zu sehen, was dieses Gerät verfolgt.</string>
     <string name="inbox_change_offline">Verbinde dich mit dem Gateway, um das zu ändern.</string>
     <string name="inbox_jobs_load_failed">Die Jobs konnten nicht geladen werden.</string>
     <string name="inbox_report_not_here_phone">Dieser Bericht ist nicht auf dem Telefon. Vielleicht steht er weiter hinten in der Liste.</string>
     <string name="inbox_report_not_here_computer">Dieser Bericht ist nicht auf dem Computer. Vielleicht steht er weiter hinten in der Liste.</string>
-    <string name="inbox_ask_offline">Verbinde dich mit dem Gateway, um nach diesem Bericht zu fragen: Nur sein Anfang ist auf dem Telefon.</string>
+    <string name="inbox_ask_offline">Verbinde dich mit dem Gateway, um nach diesem Bericht zu fragen: Nur sein Anfang ist auf diesem Gerät.</string>
     <string name="inbox_ask_gone">Das Gateway hat diesen Bericht nicht mehr, also gibt es nur seinen Anfang zum Fragen.</string>
     <string name="inbox_ask_failed">Der ganze Bericht kam nicht vom Gateway. Versuch es gleich noch einmal.</string>
     <string name="inbox_copied_start_offline">Anfang des Berichts kopiert: Verbinde dich mit dem Gateway für den Rest.</string>

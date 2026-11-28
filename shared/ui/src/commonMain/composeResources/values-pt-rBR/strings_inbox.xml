@@ -135,13 +135,13 @@
     <string name="inbox_save_failed">Não foi possível salvar.</string>
     <string name="inbox_save_unknown">Não dá para saber se foi salvo. %1$s</string>
     <string name="inbox_plugin_too_old">O plugin herald-push do Gateway é antigo demais para a caixa de entrada.</string>
-    <string name="inbox_following_failed">Não foi possível ler o que este celular segue.</string>
-    <string name="inbox_following_offline">Conecte-se ao Gateway para ver o que este celular segue.</string>
+    <string name="inbox_following_failed">Não foi possível ler o que este dispositivo segue.</string>
+    <string name="inbox_following_offline">Conecte-se ao Gateway para ver o que este dispositivo segue.</string>
     <string name="inbox_change_offline">Conecte-se ao Gateway para mudar isso.</string>
     <string name="inbox_jobs_load_failed">Não foi possível carregar as tarefas.</string>
     <string name="inbox_report_not_here_phone">Esse relatório não está no celular. Talvez esteja mais para trás na lista.</string>
     <string name="inbox_report_not_here_computer">Esse relatório não está no computador. Talvez esteja mais para trás na lista.</string>
-    <string name="inbox_ask_offline">Conecte-se ao Gateway para perguntar sobre este relatório: só o início dele está no celular.</string>
+    <string name="inbox_ask_offline">Conecte-se ao Gateway para perguntar sobre este relatório: só o início dele está neste dispositivo.</string>
     <string name="inbox_ask_gone">O Gateway não tem mais este relatório, então só dá para perguntar sobre o início.</string>
     <string name="inbox_ask_failed">Não foi possível obter o relatório inteiro do Gateway. Tente de novo daqui a pouco.</string>
     <string name="inbox_copied_start_offline">O início do relatório foi copiado: conecte-se ao Gateway para o resto.</string>
