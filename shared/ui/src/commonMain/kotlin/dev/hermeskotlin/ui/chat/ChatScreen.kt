@@ -368,6 +368,7 @@ import dev.hermeskotlin.designsystem.components.DropdownMenu
 import dev.hermeskotlin.designsystem.components.IconButton
 import dev.hermeskotlin.designsystem.components.MenuAction
 import dev.hermeskotlin.core.settings.RunningSend
+import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.designsystem.components.plainTextClipEntry
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -587,6 +588,7 @@ fun ChatScreen(
         derivedStateOf { viewModel.composer.let { pathRefQuery(it.text.toString(), it.selection.end) } }
     }
     val projectsApi = koinInject<ProjectsApi>()
+    val detailWidthStore = if (isDesktop) koinInject<SettingsStore>() else null
     var pathEntries by remember { mutableStateOf(emptyList<PathEntry>()) }
     val folderTyped = pathRef?.folder
     LaunchedEffect(folderTyped, connected, target.profile) {
@@ -708,6 +710,7 @@ fun ChatScreen(
         attachmentPicker = attachmentPicker.takeIf { isDesktop },
         imagePaste = imagePaste,
         onOpenToolDetails = { if (docked) previewing = null },
+        onDetailRailWidthChange = { width -> detailWidthStore?.update { it.copy(detailRailWidth = width) } },
         rail = railFile?.let { file ->
             {
                 FileViewer(file, onDismiss = { previewing = null }, load = viewModel::previewFile, download = viewModel::downloadFile, docked = true)
@@ -890,6 +893,7 @@ internal fun ChatView(
     onOpenSubagentTranscript: () -> Unit = {},
     loadSubagentTranscript: suspend (String, String?) -> SubagentTranscriptRead? = { _, _ -> null },
     onOpenToolDetails: () -> Unit = {},
+    onDetailRailWidthChange: (Int?) -> Unit = {},
 ) {
     val composerFocus = remember { FocusRequester() }
     var focusComment by remember { mutableStateOf<Long?>(null) }
@@ -969,14 +973,17 @@ internal fun ChatView(
         if (rail != null || inspectedTools == null) toolSelection = null
     }
     val showToolDetails = inspectedTools != null && rail == null && subagentInspector == null
-    val detailRailWidth = (chatPaneWidth * 0.44f).coerceIn(200.dp, 520.dp).coerceAtMost(chatPaneWidth * 0.62f)
     val inspectorInRail = isDesktop && rail == null && subagentInspector != null
     val desktopRail = if (inspectorInRail) subagentInspector else rail
-    val railWidth = when {
-        inspectorInRail || (showToolDetails && isDesktop) -> detailRailWidth
-        rail != null -> RAIL_WIDTH
-        else -> 0.dp
-    }
+    val desktopDetailsOpen = isDesktop && (showToolDetails || desktopRail != null)
+    val savedRailWidth = LocalAppSettings.current.detailRailWidth
+    var preferredRailWidth by remember(savedRailWidth) { mutableStateOf(savedRailWidth?.dp) }
+    var draggedRailWidth by remember(desktopDetailsOpen) { mutableStateOf<Dp?>(null) }
+    val railLimits = detailRailWidths(chatPaneWidth)
+    val defaultRailWidth = if (rail != null) RAIL_WIDTH else (chatPaneWidth * 0.44f).coerceIn(200.dp, 520.dp)
+    val railWidth = if (desktopDetailsOpen) {
+        (draggedRailWidth ?: preferredRailWidth ?: defaultRailWidth).coerceIn(railLimits)
+    } else 0.dp
     val fullTranscriptOpen = !isDesktop && subagentInspector != null
     if (fullTranscriptOpen) {
         WindowDialog(onDismissRequest = ::closeSubagents, properties = fullScreenDialogProperties()) {
@@ -1037,6 +1044,16 @@ internal fun ChatView(
                             toolSelection = null
                         }
                     }
+                }
+                if (desktopDetailsOpen && railWidth > 0.dp) {
+                    DetailRailDivider(
+                        railWidth, railLimits, onDragWidth = { draggedRailWidth = it },
+                        onSaveWidth = { width ->
+                            preferredRailWidth = width
+                            onDetailRailWidthChange(width?.value?.roundToInt())
+                        },
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    )
                 }
             }
         }

@@ -19,6 +19,7 @@
     <string name="chat_stop">Stop</string>
     <string name="chat_restore">Restore</string>
     <string name="chat_remove_named">Remove %1$s</string>
+    <string name="chat_detail_rail_width">Details panel width</string>
     <string name="chat_hide_details">Hide details</string>
     <string name="chat_show_details">Show details</string>
     <string name="chat_details_shown">Details shown</string>

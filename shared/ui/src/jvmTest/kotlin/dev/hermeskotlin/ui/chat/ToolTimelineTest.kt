@@ -2,6 +2,8 @@ package dev.hermeskotlin.ui.chat
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -17,6 +19,11 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
@@ -204,6 +211,23 @@ class ToolTimelineTest {
         onNode(expandsCall("Read the backup log")).performClick()
         onNodeWithText("All archives found").assertIsDisplayed()
         onNodeWithText("Snapshot listing timed out").assertIsDisplayed()
+        val divider = onNodeWithContentDescription("Details panel width")
+        divider.performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(420f)) }
+        assertTrue(onNodeWithText("Tool details").getUnclippedBoundsInRoot().left < details.left)
+        divider.performMouseInput { doubleClick(center) }
+        assertEquals(details.left, onNodeWithText("Tool details").getUnclippedBoundsInRoot().left)
+        divider.performMouseInput {
+            moveTo(center)
+            press()
+            moveTo(center - Offset(36f, 0f))
+            moveTo(center - Offset(68f, 0f))
+            release()
+        }
+        val draggedLeft = onNodeWithText("Tool details").getUnclippedBoundsInRoot().left
+        assertTrue(draggedLeft < details.left)
+        divider.performSemanticsAction(SemanticsActions.RequestFocus) { assertTrue(it()) }
+        divider.performKeyInput { pressKey(Key.DirectionRight) }
+        assertTrue(onNodeWithText("Tool details").getUnclippedBoundsInRoot().left > draggedLeft)
         runOnIdle { assertTrue(back.back()) }
         onNodeWithText("Tool details").assertDoesNotExist()
         onNode(opensDetails("Check backup snapshots")).assertIsDisplayed()
