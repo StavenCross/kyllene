@@ -26,9 +26,17 @@ class NavPagesTest {
     }
 
     @Test
-    fun aDesktopHasNoInbox() {
+    fun desktopWithoutPushHasNoInbox() {
         assertEquals(phonePages - SidebarPage.Inbox, shownNavPages(AppSettings(), desktop = true))
         assertEquals(phonePages - SidebarPage.Inbox, navPages(desktop = true))
+    }
+
+    @Test
+    fun desktopWithPushShowsInboxAndHonoursTheHiddenPreference() {
+        assertEquals(phonePages, navPages(desktop = true, pushAvailable = true))
+        assertEquals(phonePages, shownNavPages(AppSettings(), desktop = true, pushAvailable = true))
+        val hidden = AppSettings().withSidebarPage(SidebarPage.Inbox.name, shown = false)
+        assertEquals(phonePages - SidebarPage.Inbox, shownNavPages(hidden, desktop = true, pushAvailable = true))
     }
 
     @Test

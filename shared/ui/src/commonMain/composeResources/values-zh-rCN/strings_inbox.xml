@@ -60,7 +60,7 @@
     </plurals>
     <string name="inbox_failed_runs">失败的运行</string>
     <string name="inbox_open_failed_runs">打开失败的运行</string>
-    <string name="inbox_needs_push">收件箱需要开启“随处通知”，它会告诉网关这是哪部手机。</string>
+    <string name="inbox_needs_push">收件箱需要开启“随处通知”，它会告诉网关这是哪台设备。</string>
     <string name="inbox_needs_plugin">收件箱需要网关的 herald-push 插件 %1$s。请在设置中更新。</string>
     <string name="inbox_open_settings">打开设置</string>
     <string name="inbox_loading">正在加载…</string>
@@ -126,13 +126,13 @@
     <string name="inbox_save_failed">无法保存。</string>
     <string name="inbox_save_unknown">无法确定是否已保存。%1$s</string>
     <string name="inbox_plugin_too_old">网关的 herald-push 插件版本过旧，无法用于收件箱。</string>
-    <string name="inbox_following_failed">无法读取这部手机关注的内容。</string>
-    <string name="inbox_following_offline">连接到网关以查看这部手机关注的内容。</string>
+    <string name="inbox_following_failed">无法读取这台设备关注的内容。</string>
+    <string name="inbox_following_offline">连接到网关以查看这台设备关注的内容。</string>
     <string name="inbox_change_offline">连接到网关后才能更改。</string>
     <string name="inbox_jobs_load_failed">无法加载任务。</string>
     <string name="inbox_report_not_here_phone">这份报告不在手机上，可能在列表更靠后的位置。</string>
     <string name="inbox_report_not_here_computer">这份报告不在电脑上，可能在列表更靠后的位置。</string>
-    <string name="inbox_ask_offline">连接到网关才能询问这份报告：手机上只有它的开头。</string>
+    <string name="inbox_ask_offline">连接到网关才能询问这份报告：这台设备上只有它的开头。</string>
     <string name="inbox_ask_gone">网关已不再保存这份报告，所以只能询问它的开头。</string>
     <string name="inbox_ask_failed">无法从网关获取完整报告。请稍后重试。</string>
     <string name="inbox_copied_start_offline">已复制报告的开头：连接到网关以获取其余部分。</string>

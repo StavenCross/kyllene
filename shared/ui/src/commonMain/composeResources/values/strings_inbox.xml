@@ -72,7 +72,7 @@
     </plurals>
     <string name="inbox_failed_runs">Failed runs</string>
     <string name="inbox_open_failed_runs">Open failed runs</string>
-    <string name="inbox_needs_push">The Inbox needs Notifications anywhere, which tells the gateway which phone this is.</string>
+    <string name="inbox_needs_push">The Inbox needs Notifications anywhere, which tells the gateway which device this is.</string>
     <string name="inbox_needs_plugin">The gateway’s herald-push plugin needs %1$s for the Inbox. Update it in Settings.</string>
     <string name="inbox_open_settings">Open Settings</string>
     <string name="inbox_loading">Loading…</string>
@@ -139,13 +139,13 @@
     <string name="inbox_save_failed">Couldn’t save that.</string>
     <string name="inbox_save_unknown">Couldn’t tell whether that was saved. %1$s</string>
     <string name="inbox_plugin_too_old">The gateway’s herald-push plugin is too old for the Inbox.</string>
-    <string name="inbox_following_failed">Couldn’t read what this phone follows.</string>
-    <string name="inbox_following_offline">Connect to the gateway to see what this phone follows.</string>
+    <string name="inbox_following_failed">Couldn’t read what this device follows.</string>
+    <string name="inbox_following_offline">Connect to the gateway to see what this device follows.</string>
     <string name="inbox_change_offline">Connect to the gateway to change this.</string>
     <string name="inbox_jobs_load_failed">Couldn’t load the jobs.</string>
     <string name="inbox_report_not_here_phone">That report isn’t on the phone. It may be further back in the list.</string>
     <string name="inbox_report_not_here_computer">That report isn’t on the computer. It may be further back in the list.</string>
-    <string name="inbox_ask_offline">Connect to the gateway to ask about this report: only its start is on the phone.</string>
+    <string name="inbox_ask_offline">Connect to the gateway to ask about this report: only its start is on this device.</string>
     <string name="inbox_ask_gone">The gateway no longer has this report, so there’s only its start to ask about.</string>
     <string name="inbox_ask_failed">Couldn’t get the whole report from the gateway. Try again in a moment.</string>
     <string name="inbox_copied_start_offline">Copied the start of the report: connect to the gateway for the rest.</string>
