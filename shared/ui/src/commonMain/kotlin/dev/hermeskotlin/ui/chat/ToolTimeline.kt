@@ -82,6 +82,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 private const val INLINE_TOOL_LIMIT = 10
+private const val LIVE_TOOL_LIMIT = 4
 
 internal val LocalOpenToolDetails = staticCompositionLocalOf<((String, String) -> Unit)?> { null }
 
@@ -149,20 +150,19 @@ internal fun Tools(tools: List<ToolActivity>, messageKey: String) {
     }
 }
 
-/** Keep the current calls and a short history visible while the reply is streaming. */
+/** Keep the latest calls visible while the reply is streaming. */
 @Composable
 internal fun LiveSteps(tools: List<ToolActivity>, messageKey: String) {
     if (tools.isEmpty()) return
 
-    val firstRecentFinished = tools.indices.filter { !tools[it].running }.takeLast(4).firstOrNull() ?: 0
-    val shown = tools.indices.filter { it >= firstRecentFinished || tools[it].running }.takeLast(INLINE_TOOL_LIMIT)
+    val earlier = (tools.size - LIVE_TOOL_LIMIT).coerceAtLeast(0)
+    val shown = earlier..tools.lastIndex
     val offsets = remember(tools) { toolTimelineOffsets(tools) }
     val showOffsets = shown.any { offsets[it] != null }
     val openToolDetails = LocalOpenToolDetails.current
     var selectedToolId by rememberSaveable(messageKey) { mutableStateOf<String?>(null) }
 
     Column {
-        val earlier = tools.size - shown.size
         if (earlier > 0) {
             Text(
                 pluralStringResource(Res.plurals.chat_earlier_steps, earlier, earlier),
@@ -171,14 +171,14 @@ internal fun LiveSteps(tools: List<ToolActivity>, messageKey: String) {
                 modifier = Modifier.padding(start = 26.dp, bottom = 4.dp),
             )
         }
-        shown.forEachIndexed { row, index ->
+        shown.forEach { index ->
             val tool = tools[index]
             key(tool.id) {
                 var expanded by rememberSaveable { mutableStateOf(false) }
                 val step = if (tool.running) null else toolDone(tool)
                 val title = if (step != null) listOfNotNull(step.title.text(), step.detail).joinToString(" ") else tool.title()
                 ToolTimelineRow(
-                    tool, offsets[index], showOffsets, row > 0, row < shown.lastIndex,
+                    tool, offsets[index], showOffsets, index > earlier, index < tools.lastIndex,
                     title = title,
                     titleMaxLines = 1,
                     preview = if (expanded) liveToolPreview(tool, step?.detail ?: title) else null,

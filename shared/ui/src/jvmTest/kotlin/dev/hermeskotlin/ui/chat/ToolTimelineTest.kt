@@ -1,6 +1,7 @@
 package dev.hermeskotlin.ui.chat
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -109,6 +110,30 @@ class ToolTimelineTest {
         onNode(expandsCall("Call 1")).performClick()
         onNodeWithText("Result 1").assertExists()
         onNode(expandsCall("Call 12")).assertExists()
+    }
+
+    @Test
+    fun newRunningCallsDisplaceOlderLiveRowsAndKeepFullHistoryInDetails() = runComposeUiTest {
+        val completed = (1..4).map { index ->
+            ToolActivity("old-$index", "terminal", detail = "Finished call $index", completed = true)
+        }
+        val running = (1..3).map { index ->
+            ToolActivity("new-$index", "terminal", detail = "Running call $index", running = true)
+        }
+        val calls = mutableStateOf(completed)
+        setContent { HermesTheme(ColorScheme.Dark) { LiveSteps(calls.value, "live-cap") } }
+        for (index in 1..4) onNodeWithText("Ran Finished call $index").assertExists()
+
+        runOnIdle { calls.value = completed + running }
+
+        onNodeWithText("3 earlier steps").assertExists()
+        for (index in 1..3) onNodeWithText("Ran Finished call $index").assertDoesNotExist()
+        onNodeWithText("Ran Finished call 4").assertExists()
+        for (index in 1..3) onNodeWithText("Running call $index").assertExists()
+        onNodeWithText("Running call 3").performClick()
+        onNodeWithText("Running call 3").performClick()
+        onNodeWithText("Tool details").assertExists()
+        onNode(expandsCall("Finished call 1")).assertExists()
     }
 
     @Test
