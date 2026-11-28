@@ -2452,7 +2452,6 @@ private fun Messages(
                             }
                         },
                     ) {
-                    CompositionLocalProvider(LocalTranscriptInlineBudget provides inlineBudget) {
                     when (message) {
                         is ChatMessage.User -> UserBubble(
                             message,
@@ -2475,7 +2474,7 @@ private fun Messages(
                             onBranch = ask(MessageChange.Branch, message.key).takeIf { !message.pending && message.check == null },
                             editing = editing == message.key,
                         )
-                        is ChatMessage.Assistant -> {
+                        is ChatMessage.Assistant -> CompositionLocalProvider(LocalTranscriptInlineBudget provides inlineBudget) {
                             val reply = @Composable {
                                 AssistantReply(
                                     message,
@@ -2500,7 +2499,9 @@ private fun Messages(
                             val to = message.repliedTo
                             if (to != null && !message.streaming) RepliedToFold(to, message.text, reply) else reply()
                         }
-                        is ChatMessage.Event -> TranscriptEventRow(message.event)
+                        is ChatMessage.Event -> CompositionLocalProvider(LocalTranscriptInlineBudget provides inlineBudget) {
+                            TranscriptEventRow(message.event)
+                        }
                         is ChatMessage.Command -> CommandOutput(message) { actions.dismissSideCard(message) }
                         is ChatMessage.Notice -> NoticeLine(message)
                     }
