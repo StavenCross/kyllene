@@ -13,11 +13,13 @@ import dev.hermeskotlin.core.voice.VoiceKeepAlive
 import dev.hermeskotlin.desktop.web.Jcef
 import dev.hermeskotlin.desktop.web.JcefWeb
 import dev.hermeskotlin.ui.DesktopWeb
+import dev.hermeskotlin.ui.chat.DesktopFileOpener
 import org.koin.dsl.module
 import java.net.InetAddress
 
 /** What the Android app adds to the shared modules, as far as the desktop needs it. */
 val desktopModule = module {
+    if (inFlatpak) single<DesktopFileOpener> { FlatpakFileOpener() }
     // A desktop app isn't stopped in the background: a voice chat needs nothing to keep it up.
     single<VoiceKeepAlive> {
         object : VoiceKeepAlive {

@@ -218,7 +218,8 @@ Notifications anywhere is off by default. On supported Linux storage, enabling i
 uses the existing gateway plugin installation consent and authenticated registration
 coordinator. While Kyllene is running, an outbound ntfy stream receives signed,
 encrypted bot replies, scheduled runs and test pings. Scheduled runs are saved in
-their source gateway's Inbox; only runs marked for notification produce a notice.
+their source gateway's Inbox. Open it from the Chats sidebar or the command palette.
+Only runs marked for notification produce a notice.
 Reply notifications follow the existing reply preference. Phone tools and incoming
 calls are not handled by this receiver. No remote images or message URLs are fetched.
 

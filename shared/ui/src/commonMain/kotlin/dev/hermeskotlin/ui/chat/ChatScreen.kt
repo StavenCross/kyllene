@@ -471,8 +471,9 @@ fun ChatScreen(
     // Cleared (here or on another client) while open, there is nothing left to show.
     val hasControl = state.control != null
     LaunchedEffect(hasControl) { if (!hasControl) controlOpen = false }
-    var viewing by remember { mutableStateOf<ViewerImage?>(null) }
-    var previewing by remember { mutableStateOf<GatewayFile?>(null) }
+    val conversationKey = Triple(target.gateway.gatewayUrl, target.profile, target.storedSessionId)
+    var viewing by remember(conversationKey, target.nonce) { mutableStateOf<ViewerImage?>(null) }
+    var previewing by remember(conversationKey, target.nonce) { mutableStateOf<GatewayFile?>(null) }
     // On a wide desktop window a file opens in a rail beside the chat, as Hermes Desktop's right panel, which
     // Ctrl+J puts away and brings back; a picture still opens in the picture viewer.
     var railShown by remember { mutableStateOf(true) }
@@ -601,7 +602,6 @@ fun ChatScreen(
     val refs = if (isDesktop) refChoices(mention, pathRef, pathEntries) else emptyList()
     val density = LocalDensity.current
     val modelPillBounds = remember { mutableStateOf<Rect?>(null) }
-    val conversationKey = Triple(target.gateway.gatewayUrl, target.profile, target.storedSessionId)
     val editing = viewModel.editing.collectAsStateWithLifecycle().value
     // On a phone, Back leaves an edit as Esc does on the desktop, before the chat list behind the chat takes it.
     PlatformBackHandler(enabled = !isDesktop && editing != null) { viewModel.cancelEdit() }
@@ -701,7 +701,8 @@ fun ChatScreen(
         imagePaste = imagePaste,
         rail = railFile?.let { file ->
             {
-                FileViewer(file, onDismiss = { previewing = null }, load = viewModel::previewFile, download = viewModel::downloadFile, docked = true)
+                FileViewer(file, onDismiss = { previewing = null }, load = { viewModel.previewFile(it, target) },
+                    download = { viewModel.downloadFile(it, target) }, docked = true)
             }
         },
     )
@@ -754,8 +755,8 @@ fun ChatScreen(
     GatewayFileViewer(
         file = previewing.takeIf { !docked },
         onDismiss = { previewing = null },
-        load = viewModel::previewFile,
-        download = viewModel::downloadFile,
+        load = { viewModel.previewFile(it, target) },
+        download = { viewModel.downloadFile(it, target) },
     )
     viewing?.let { image ->
         CompositionLocalProvider(LocalMediaLoader provides viewModel::loadMedia) {

@@ -379,18 +379,22 @@ internal fun FileViewerPage(
 
     fun withBytes(action: suspend (ByteArray) -> Unit) {
         if (busy || fetching) return
-        fetched?.let { bytes ->
-            scope.launch { action(bytes) }
-            return
-        }
+        notice = null
         busy = true
         scope.launch {
-            when (val result = download(file)) {
-                is FileDownload.Ready -> action(result.bytes)
-                is FileDownload.Failed -> notice = Notice(getString(Res.string.chat_file_get_failed, file.name, fileProblemWords(result.problem)), error = true)
+            try {
+                when (val result = fetched?.let { FileDownload.Ready(it) } ?: download(file)) {
+                    is FileDownload.Ready -> action(result.bytes)
+                    is FileDownload.Failed -> notice = Notice(getString(Res.string.chat_file_get_failed, file.name, fileProblemWords(result.problem)), error = true)
+                }
+            } finally {
+                busy = false
             }
-            busy = false
         }
+    }
+
+    fun share() = withBytes { bytes ->
+        notice = actions.shareFailure(bytes, file.name)?.let { Notice(it, error = true) }
     }
 
     val textual = ready != null && kind != GatewayFileKind.Markdown && kind != GatewayFileKind.Table || ready != null && raw
@@ -432,7 +436,7 @@ internal fun FileViewerPage(
                 IconButton(Lucide.Download, contentDescription = stringResource(Res.string.chat_save_named, file.name), onClick = {
                     withBytes { notice = Notice(actions.save(it, file.name)) }
                 })
-                IconButton(shareIcon, contentDescription = shareNamed(file.name), onClick = { withBytes { actions.share(it, file.name) } })
+                IconButton(shareIcon, contentDescription = shareNamed(file.name), onClick = ::share)
             }
         }
 
@@ -514,11 +518,9 @@ internal fun FileViewerPage(
                         kind,
                         fileProblemText(state.problem),
                         onSave = { withBytes { notice = Notice(actions.save(it, file.name)) } },
-                        onShare = { withBytes { actions.share(it, file.name) } }.takeIf { fetched != null },
+                        onShare = (::share).takeIf { fetched != null },
                     )
-                    ready == null -> Unavailable(file, kind, null, onSave = { withBytes { notice = Notice(actions.save(it, file.name)) } }, onShare = {
-                        withBytes { actions.share(it, file.name) }
-                    })
+                    ready == null -> Unavailable(file, kind, null, onSave = { withBytes { notice = Notice(actions.save(it, file.name)) } }, onShare = ::share)
                     else -> {
                         val shown = rememberLinkedPictures(file, pictures, download, onOpenPicture)
                         val onLink by rememberUpdatedState(onOpenFile)

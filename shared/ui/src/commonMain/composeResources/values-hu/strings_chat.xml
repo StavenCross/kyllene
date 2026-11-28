@@ -59,10 +59,11 @@
     </plurals>
     <string name="chat_table_more">a többi a teljes fájlban</string>
     <string name="chat_file_open_failed">Nem sikerült megnyitni: %1$s</string>
+    <string name="chat_file_open_timed_out">A(z) %1$s megnyitása túllépte az időkorlátot</string>
     <string name="chat_file_no_preview">Ehhez a fájlhoz nincs előnézet</string>
     <string name="chat_file_no_preview_type">%1$s fájlokhoz nincs előnézet</string>
     <string name="chat_file_save_hint">Mentsd a telefonra, vagy oszd meg egy alkalmazással, amely meg tudja nyitni.</string>
-    <string name="chat_file_save_hint_desktop">Mentsd el, aztán nyisd meg egy alkalmazással, amely tudja.</string>
+    <string name="chat_file_save_hint_desktop">Nyisd meg egy másik alkalmazásban, vagy ments egy másolatot.</string>
     <string name="chat_file_get_failed">Nem sikerült lekérni: %1$s. %2$s</string>
     <string name="chat_get_failed_named">Nem sikerült lekérni a Gatewayről: %1$s.</string>
 

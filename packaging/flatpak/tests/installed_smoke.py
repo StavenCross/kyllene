@@ -13,7 +13,7 @@ import tempfile
 import threading
 import time
 from PIL import ImageGrab
-from smoke_gateway import server
+from smoke_gateway import SESSION, server
 
 APP = 'app.kyllene.Kyllene.Devel'
 BUTTON = (18, 69, 171)
@@ -149,7 +149,17 @@ def main(bundle, from_repo=False, branch=None):
             # The fixture opens /api/ws only with the ticket subprotocol, so any call proves the handshake.
             until(lambda: any(kind == 'RPC' for kind, _ in service.calls), 'ticketed WebSocket', app)
             time.sleep(1)
-            attempt(lambda: click(140, 424), lambda: pixels(LOADED), 'local HTML widget rendering')
+            def open_fixture_chat():
+                # By its title in the Ctrl+K palette, not by a point in the sidebar: page rows above the
+                # chats (the Inbox, when the build has push) move the chat row. Escape closes a palette a
+                # slow earlier try left open, so Ctrl+K opens it rather than toggling it shut.
+                xdo('key', 'Escape')
+                xdo('key', 'ctrl+k')
+                time.sleep(1)
+                xdo('type', '--clearmodifiers', SESSION['title'])
+                time.sleep(.5)
+                xdo('key', 'Return')
+            attempt(open_fixture_chat, lambda: pixels(LOADED), 'local HTML widget rendering')
             button = until(lambda: pixels(BUTTON), 'painted widget button', app)
             click((min(x for x, y in button) + max(x for x, y in button)) // 2,
                   (min(y for x, y in button) + max(y for x, y in button)) // 2)

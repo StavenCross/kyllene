@@ -68,7 +68,7 @@
     </plurals>
     <string name="inbox_failed_runs">Ejecuciones fallidas</string>
     <string name="inbox_open_failed_runs">Abrir ejecuciones fallidas</string>
-    <string name="inbox_needs_push">La bandeja de entrada necesita Notificaciones en cualquier lugar, que le dice al Gateway qué teléfono es este.</string>
+    <string name="inbox_needs_push">La bandeja de entrada necesita Notificaciones en cualquier lugar, que le dice al Gateway qué dispositivo es este.</string>
     <string name="inbox_needs_plugin">La bandeja de entrada necesita la versión %1$s del plugin herald-push del Gateway. Actualízalo en Ajustes.</string>
     <string name="inbox_open_settings">Abrir Ajustes</string>
     <string name="inbox_loading">Cargando…</string>
@@ -135,13 +135,13 @@
     <string name="inbox_save_failed">No se pudo guardar.</string>
     <string name="inbox_save_unknown">No se sabe si se guardó. %1$s</string>
     <string name="inbox_plugin_too_old">El plugin herald-push del Gateway es demasiado antiguo para la bandeja de entrada.</string>
-    <string name="inbox_following_failed">No se pudo leer qué sigue este teléfono.</string>
-    <string name="inbox_following_offline">Conéctate al Gateway para ver qué sigue este teléfono.</string>
+    <string name="inbox_following_failed">No se pudo leer qué sigue este dispositivo.</string>
+    <string name="inbox_following_offline">Conéctate al Gateway para ver qué sigue este dispositivo.</string>
     <string name="inbox_change_offline">Conéctate al Gateway para cambiar esto.</string>
     <string name="inbox_jobs_load_failed">No se pudieron cargar las tareas.</string>
     <string name="inbox_report_not_here_phone">Ese informe no está en el teléfono. Puede estar más atrás en la lista.</string>
     <string name="inbox_report_not_here_computer">Ese informe no está en el ordenador. Puede estar más atrás en la lista.</string>
-    <string name="inbox_ask_offline">Conéctate al Gateway para preguntar sobre este informe: solo su principio está en el teléfono.</string>
+    <string name="inbox_ask_offline">Conéctate al Gateway para preguntar sobre este informe: solo su principio está en este dispositivo.</string>
     <string name="inbox_ask_gone">El Gateway ya no tiene este informe, así que solo puedes preguntar sobre su principio.</string>
     <string name="inbox_ask_failed">No se pudo obtener el informe completo del Gateway. Inténtalo de nuevo en un momento.</string>
     <string name="inbox_copied_start_offline">Se copió el principio del informe: conéctate al Gateway para el resto.</string>

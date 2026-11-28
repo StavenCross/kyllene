@@ -59,10 +59,11 @@
     </plurals>
     <string name="chat_table_more">mais no arquivo completo</string>
     <string name="chat_file_open_failed">Não foi possível abrir %1$s</string>
+    <string name="chat_file_open_timed_out">O tempo de espera para abrir %1$s expirou</string>
     <string name="chat_file_no_preview">Não há prévia para este arquivo</string>
     <string name="chat_file_no_preview_type">Não há prévia para arquivos %1$s</string>
     <string name="chat_file_save_hint">Salve no telefone ou compartilhe com um app que o abra.</string>
-    <string name="chat_file_save_hint_desktop">Salve e depois abra com um app que consiga.</string>
+    <string name="chat_file_save_hint_desktop">Abra em outro app ou salve uma cópia.</string>
     <string name="chat_file_get_failed">Não foi possível obter %1$s. %2$s</string>
     <string name="chat_get_failed_named">Não foi possível obter %1$s do Gateway.</string>
 

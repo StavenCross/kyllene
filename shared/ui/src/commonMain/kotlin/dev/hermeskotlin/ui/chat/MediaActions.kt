@@ -16,6 +16,12 @@ interface MediaActions {
 
     /** Opens the system share sheet for the file. */
     fun share(bytes: ByteArray, name: String)
+
+    /** Hands off a file and returns a localized failure, if the platform can report one. */
+    suspend fun shareFailure(bytes: ByteArray, name: String): String? {
+        share(bytes, name)
+        return null
+    }
 }
 
 /** What a save said, and whether the file was written. */
