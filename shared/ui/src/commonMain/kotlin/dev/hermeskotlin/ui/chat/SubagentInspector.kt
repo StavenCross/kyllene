@@ -150,7 +150,10 @@ internal fun DelegationActivity(calls: List<ToolActivity>, messageKey: String) {
         Row(
             Modifier.heightIn(min = MinTouchTarget)
                 .clip(RoundedCornerShape(8.dp))
-                .handCursor().clickable(role = Role.Button) { expanded = !expanded }
+                .handCursor().clickable(role = Role.Button) {
+                    expanded = !expanded
+                    if (expanded) expandedRow = rows.singleOrNull { !it.task.refused }?.key
+                }
                 .semantics { stateDescription = state }
                 .padding(horizontal = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
