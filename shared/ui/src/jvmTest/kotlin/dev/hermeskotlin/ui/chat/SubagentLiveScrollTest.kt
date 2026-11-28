@@ -5,7 +5,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.onNodeWithText
@@ -62,6 +66,43 @@ class SubagentLiveScrollTest {
         onNodeWithText("Fixture line 22").assertDoesNotExist()
         list.performScrollToIndex(21)
         onNodeWithText("Fixture line 22").assertIsDisplayed()
+    }
+
+    @Test fun activityFallbackShowsToolRowsWithoutInventingOutcome() = runComposeUiTest {
+        val task = SubagentRow(
+            key = "task", goal = "Fixture", status = SubagentStatus.Done,
+            activity = listOf("terminal: Check backup status", "read_file: Read report"),
+        )
+        setContent {
+            HermesTheme(ColorScheme.Dark) {
+                SubagentInspector(
+                    selected = InspectorRow("task", task), runtimeId = null, load = { _, _ -> null },
+                    onStop = {}, onDismiss = {}, desktop = false, modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        onNodeWithText("terminal: Check backup status").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Completion unconfirmed"))
+    }
+
+    @Test fun transcriptToolTimelineExpandsOutputInPlace() = runComposeUiTest {
+        val task = SubagentRow(key = "task", goal = "Fixture", status = SubagentStatus.Done, transcriptId = "child")
+        val tool = SessionMessage(id = 1, role = "tool", toolName = "read_file", content = JsonPrimitive("The backup is complete."))
+        val page = SubagentTranscriptPage(listOf(tool), null, false, true, false, true)
+        setContent {
+            HermesTheme(ColorScheme.Dark) {
+                SubagentInspector(
+                    selected = InspectorRow("task", task), runtimeId = "parent", load = { _, _ -> page },
+                    onStop = {}, onDismiss = {}, desktop = false, modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        onNodeWithText("Ran 1 tool").performClick()
+        onNodeWithText("read_file").performClick()
+        onNodeWithText("The backup is complete.").assertIsDisplayed()
+        onNodeWithText("Subagent transcript").assertIsDisplayed()
     }
 
     @Test fun savedCommentaryAppearsWithReasoningHidden() = runComposeUiTest {

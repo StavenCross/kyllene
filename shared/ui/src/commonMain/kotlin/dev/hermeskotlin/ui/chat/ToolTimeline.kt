@@ -88,7 +88,7 @@ internal val LocalOpenToolDetails = staticCompositionLocalOf<((String, String) -
 
 /** Completed tools read like the other disclosures in the reply. The list itself is a flat timeline. */
 @Composable
-internal fun Tools(tools: List<ToolActivity>, messageKey: String) {
+internal fun Tools(tools: List<ToolActivity>, messageKey: String, inlineDetails: Boolean = false) {
     var expanded by rememberSaveable(messageKey) { mutableStateOf(false) }
     var selectedToolId by rememberSaveable(messageKey) { mutableStateOf<String?>(null) }
     val openToolDetails = LocalOpenToolDetails.current
@@ -130,15 +130,20 @@ internal fun Tools(tools: List<ToolActivity>, messageKey: String) {
             )
         }
         if (expanded) {
-            val visibleCalls = tools.takeLast(INLINE_TOOL_LIMIT)
+            val limit = if (inlineDetails) tools.size else INLINE_TOOL_LIMIT
+            val visibleCalls = tools.takeLast(limit)
             // Keep each visible call's offset relative to the first call in the turn.
-            val offsets = remember(tools) { toolTimelineOffsets(tools).takeLast(INLINE_TOOL_LIMIT) }
+            val offsets = remember(tools, limit) { toolTimelineOffsets(tools).takeLast(limit) }
             val showOffsets = offsets.any { it != null }
             visibleCalls.forEachIndexed { index, tool ->
                 key(tool.id) {
-                    ToolTimelineRow(tool, offsets[index], showOffsets, index > 0, index < visibleCalls.lastIndex) {
-                        if (openToolDetails != null) openToolDetails(messageKey, tool.id)
-                        else selectedToolId = tool.id
+                    if (inlineDetails) {
+                        InlineTranscriptToolRow(tool, messageKey, offsets[index], showOffsets, index > 0, index < visibleCalls.lastIndex)
+                    } else {
+                        ToolTimelineRow(tool, offsets[index], showOffsets, index > 0, index < visibleCalls.lastIndex) {
+                            if (openToolDetails != null) openToolDetails(messageKey, tool.id)
+                            else selectedToolId = tool.id
+                        }
                     }
                 }
             }
@@ -147,6 +152,38 @@ internal fun Tools(tools: List<ToolActivity>, messageKey: String) {
     val selected = selectedToolId
     if (selected != null && openToolDetails == null) key(messageKey) {
         ToolDetailsViewer(tools, messageKey, selected) { selectedToolId = null }
+    }
+}
+
+@Composable
+private fun InlineTranscriptToolRow(
+    tool: ToolActivity, messageKey: String, offset: String?, showOffsets: Boolean,
+    hasPrevious: Boolean, hasNext: Boolean,
+) {
+    val hasDetails = tool.input != null || tool.output != null || tool.diff != null || tool.risk != null
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    ToolTimelineRow(
+        tool, offset, showOffsets, hasPrevious, hasNext,
+        onCollapse = if (expanded) ({ expanded = false }) else null,
+        clickLabel = if (expanded) Res.string.chat_hide_details else Res.string.chat_show_details,
+        onClick = if (hasDetails) ({ expanded = !expanded }) else null,
+    )
+    if (hasDetails && expanded) {
+        ToolDetailsContent(tool, messageKey, Modifier.padding(start = 26.dp, bottom = 8.dp))
+    }
+}
+
+/** Older gateways can provide just a tool name and preview, without a result or timing. */
+@Composable
+internal fun SubagentActivityTimeline(activity: List<String>) {
+    Column {
+        activity.forEachIndexed { index, line ->
+            ToolTimelineRow(
+                ToolActivity(id = "activity-$index", name = line.substringBefore(':').trim(), detail = line),
+                offset = null, showOffsets = false, hasPrevious = index > 0, hasNext = index < activity.lastIndex,
+                titleMaxLines = Int.MAX_VALUE, onClick = null,
+            )
+        }
     }
 }
 
@@ -214,7 +251,7 @@ private fun liveToolPreview(tool: ToolActivity, detail: String): String {
 
 /** One kind of tool, using the existing circles and overlap from the original Tools header. */
 @Composable
-internal fun ToolKindIcon(icon: ImageVector) {
+private fun ToolKindIcon(icon: ImageVector) {
     Box(
         Modifier
             .size(24.dp)
@@ -259,11 +296,13 @@ private fun ToolTimelineRow(
     preview: String? = null,
     onCollapse: (() -> Unit)? = null,
     clickLabel: StringResource = Res.string.chat_tool_details_page,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
 ) {
     val status = tool.statusColor()
     val statusLabel = tool.statusLabel()
     val rail = Theme[colors][textMuted].copy(alpha = 0.55f)
+    val click = if (onClick == null) Modifier else Modifier.handCursor()
+        .clickable(onClickLabel = stringResource(clickLabel), role = Role.Button, onClick = onClick)
     Box {
         Canvas(Modifier.matchParentSize()) {
             val inset = 12.dp.toPx()
@@ -281,8 +320,7 @@ private fun ToolTimelineRow(
             Modifier.fillMaxWidth()
                 .heightIn(min = MinTouchTarget)
                 .clip(RoundedCornerShape(Theme[radii][radiusSmall]))
-                .handCursor()
-                .clickable(onClickLabel = stringResource(clickLabel), role = Role.Button, onClick = onClick)
+                .then(click)
                 .semantics(mergeDescendants = true) { stateDescription = statusLabel }
                 .padding(start = 26.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
         ) {

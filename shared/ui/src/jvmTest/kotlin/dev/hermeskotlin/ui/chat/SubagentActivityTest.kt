@@ -57,7 +57,7 @@ class SubagentActivityTest {
 
         onNodeWithText("1 subagent").performClick()
         onNodeWithText("Audit the records").performClick()
-        onNodeWithContentDescription("Open transcript").performClick()
+        onNodeWithText("Done").performClick()
         val reply = onNodeWithText("The audit is complete.").assertIsDisplayed().getUnclippedBoundsInRoot()
         val details = onNodeWithText("Subagent transcript").assertIsDisplayed().getUnclippedBoundsInRoot()
         assertTrue(details.left > reply.right, "The transcript should open to the right of the chat")
@@ -89,7 +89,8 @@ class SubagentActivityTest {
         onNodeWithText("Result 4").assertDoesNotExist()
         onNodeWithContentDescription("Stop this subagent").assertDoesNotExist()
         runOnIdle { assertEquals(null, selected) }
-        onNodeWithContentDescription("Open transcript").performClick()
+        onNodeWithContentDescription("Open transcript").assertDoesNotExist()
+        onNodeWithText("Result 5").performClick()
         runOnIdle { assertEquals("reply" to "call:0:4", selected) }
 
         runOnIdle {
@@ -124,7 +125,7 @@ class SubagentActivityTest {
         stop.assertDoesNotExist()
         onNodeWithText("Second child").performClick()
         stop.performClick()
-        onNodeWithContentDescription("Open transcript").assertExists()
+        onNodeWithContentDescription("Open transcript").assertDoesNotExist()
         runOnIdle {
             assertEquals(listOf("second"), stopped)
             assertEquals(false, opened)

@@ -308,20 +308,19 @@ private fun SubagentListRow(
                 val activity = (task.activity.takeLast(2) + listOfNotNull(task.thinking, task.summary.takeUnless { task.status.live }))
                     .mapNotNull { it.lineSequence().firstOrNull()?.trim()?.takeIf(String::isNotEmpty) }
                     .distinct().takeLast(2).ifEmpty { listOf(status) }
-                Row(
-                    Modifier.fillMaxWidth().padding(start = targetSize + nestedIndent),
-                    verticalAlignment = Alignment.CenterVertically,
+                Column(
+                    Modifier.fillMaxWidth().padding(start = targetSize + nestedIndent)
+                        .heightIn(min = targetSize).clip(RoundedCornerShape(8.dp)).handCursor()
+                        .clickable(
+                            onClickLabel = stringResource(Res.string.chat_subagent_open_transcript),
+                            role = Role.Button, onClick = onOpen,
+                        ).padding(top = 6.dp, bottom = 6.dp, end = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
                 ) {
-                    Column(Modifier.weight(1f).align(Alignment.Top), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        activity.forEach { line ->
-                            Text(line, style = Theme[typography][caption], color = Theme[colors][textSecondary],
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
+                    activity.forEach { line ->
+                        Text(line, style = Theme[typography][caption], color = Theme[colors][textSecondary],
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    IconButton(
-                        Lucide.FileText, stringResource(Res.string.chat_subagent_open_transcript), onOpen,
-                        tint = Theme[colors][accentText], iconSize = 17.dp,
-                    )
                 }
             }
         }
@@ -407,9 +406,7 @@ private fun SubagentDetail(
                         style = Theme[typography][caption], color = Theme[colors][textMuted],
                     )
                     if (!loading) {
-                        task.activity.forEach {
-                            Text(it, style = Theme[typography][bodySmall], color = Theme[colors][textSecondary])
-                        }
+                        SubagentActivityTimeline(task.activity)
                         task.thinking?.let { Text(it, style = Theme[typography][bodySmall], color = Theme[colors][textMuted]) }
                     }
                 }
@@ -425,7 +422,7 @@ private fun SubagentDetail(
                     message.commentary.forEach { update ->
                         MarkdownText(remember(update) { linkFileUris(update) })
                     }
-                    if (message.tools.isNotEmpty()) SubagentTranscriptTools(message.tools, message.key)
+                    if (message.tools.isNotEmpty()) Tools(message.tools, message.key, inlineDetails = true)
                     if (message.text.isNotBlank()) SelectionContainer { MarkdownText(message.text) }
                 }
                 else -> Unit
