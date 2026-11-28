@@ -67,6 +67,19 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun detailRailWidthDefaultsToAutomaticAndPersistsSeparatelyFromSidebar() = runTest {
+        val disk = InMemoryKeyValueStore()
+        disk.put("settings.v1", """{"sidebarWidth":280}""")
+        val store = SettingsStore(disk, backgroundScope)
+        assertNull(store.settings.filterNotNull().first().detailRailWidth)
+        store.update { it.copy(detailRailWidth = 460) }
+        advanceUntilIdle()
+        val reopened = SettingsStore(disk, backgroundScope).settings.filterNotNull().first()
+        assertEquals(460, reopened.detailRailWidth)
+        assertEquals(280, reopened.sidebarWidth)
+    }
+
+    @Test
     fun opaqueComposerDefaultsOffForExistingSettingsAndPersistsWhenEnabled() = runTest {
         val disk = InMemoryKeyValueStore()
         disk.put("settings.v1", """{"theme":"Dark"}""")

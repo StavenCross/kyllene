@@ -260,9 +260,9 @@ fun HeraldPreview(scene: PreviewScene, dark: Boolean = true, accent: String = DE
                 PreviewScene.AgentScreen -> CompositionLocalProvider(
                     LocalAgentScreens provides AgentScreenContext(
                         live = listOf(AgentScreens.Live(null, setOf(ChatSamples.SCREEN_SURFACE))),
-                        onShown = { _, _ -> },
-                        onAnswer = { _, _, _ -> true },
-                        onFail = { _, _, _ -> },
+                        onShown = { _, _, _ -> },
+                        onAnswer = { _, _, _, _ -> true },
+                        onFail = { _, _, _, _ -> },
                     ),
                 ) { SampleChat(ChatSamples.agentScreen) }
                 PreviewScene.Voice -> SampleChat(ChatSamples.voice, voiceChat = ChatSamples.listening)
@@ -677,6 +677,7 @@ fun HeraldPreview(scene: PreviewScene, dark: Boolean = true, accent: String = DE
                     settings = AppSettings(sidebarNavHidden = listOf(SidebarPage.Insights.name, SidebarPage.Config.name)),
                     onUpdate = {},
                     onBack = {},
+                    pushAvailable = true,
                 )
                 PreviewScene.ConnectionCheck -> Box(Modifier.fillMaxSize()) {
                     SettingsView(

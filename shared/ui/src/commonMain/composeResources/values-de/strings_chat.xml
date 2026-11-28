@@ -14,6 +14,7 @@
     <string name="chat_stop">Stoppen</string>
     <string name="chat_restore">Wiederherstellen</string>
     <string name="chat_remove_named">%1$s entfernen</string>
+    <string name="chat_detail_rail_width">Breite des Detailbereichs</string>
     <string name="chat_hide_details">Details ausblenden</string>
     <string name="chat_show_details">Details zeigen</string>
     <string name="chat_details_shown">Details sichtbar</string>
@@ -126,6 +127,7 @@
     <string name="chat_sessions_open">Sitzungen öffnen</string>
     <string name="chat_sessions_next">Nächster Chat, der dich braucht</string>
 
+    <string name="chat_gateway_screen_title">Gateway-Tool-Anfrage</string>
     <string name="chat_screen_waiting">Wartet auf deine Antwort</string>
     <string name="chat_screen_opening">Wird geöffnet…</string>
     <string name="chat_screen_tap_answers">Ein Tippen antwortet im Chat</string>

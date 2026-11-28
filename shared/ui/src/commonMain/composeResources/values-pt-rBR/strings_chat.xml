@@ -14,6 +14,7 @@
     <string name="chat_stop">Parar</string>
     <string name="chat_restore">Restaurar</string>
     <string name="chat_remove_named">Remover %1$s</string>
+    <string name="chat_detail_rail_width">Largura do painel de detalhes</string>
     <string name="chat_hide_details">Ocultar detalhes</string>
     <string name="chat_show_details">Mostrar detalhes</string>
     <string name="chat_details_shown">Detalhes visíveis</string>
@@ -126,6 +127,7 @@
     <string name="chat_sessions_open">Abrir sessões</string>
     <string name="chat_sessions_next">Próxima conversa que precisa de você</string>
 
+    <string name="chat_gateway_screen_title">Solicitação de uma ferramenta do gateway</string>
     <string name="chat_screen_waiting">Aguardando sua resposta</string>
     <string name="chat_screen_opening">Abrindo…</string>
     <string name="chat_screen_tap_answers">Um toque responde na conversa</string>

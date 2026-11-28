@@ -28,7 +28,10 @@ import dev.hermeskotlin.ui.fullScreenDialogProperties
 import dev.hermeskotlin.ui.DialogStatusBarAppearance
 import dev.hermeskotlin.ui.frostedPanel
 import dev.hermeskotlin.ui.stepChat
+import dev.hermeskotlin.core.chat.ChatSession
+import dev.hermeskotlin.core.phone.AgentScreens
 import dev.hermeskotlin.core.phone.desktopAgentScreenChat
+import dev.hermeskotlin.core.phone.gatewayAgentScreenChat
 import dev.hermeskotlin.core.bots.MentionQuery
 import dev.hermeskotlin.core.chat.ReplyReaction
 import dev.hermeskotlin.core.chat.PathRefKind
@@ -365,6 +368,7 @@ import dev.hermeskotlin.designsystem.components.DropdownMenu
 import dev.hermeskotlin.designsystem.components.IconButton
 import dev.hermeskotlin.designsystem.components.MenuAction
 import dev.hermeskotlin.core.settings.RunningSend
+import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.designsystem.components.plainTextClipEntry
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -447,6 +451,7 @@ fun ChatScreen(
     LaunchedEffect(target) { viewModel.open(target) }
     val transcript = viewModel.transcript.collectAsStateWithLifecycle().value
     val state = transcript.state
+    val gatewayScreenOwner by viewModel.gatewayScreenOwner.collectAsStateWithLifecycle()
     // The same chat reopened with a new position (a notification for it) keeps the last one until the new one is read.
     val readPosition = viewModel.readPosition.collectAsStateWithLifecycle().value
         ?.takeIf { it.target.copy(readUpTo = null) == target.copy(readUpTo = null) }
@@ -583,6 +588,7 @@ fun ChatScreen(
         derivedStateOf { viewModel.composer.let { pathRefQuery(it.text.toString(), it.selection.end) } }
     }
     val projectsApi = koinInject<ProjectsApi>()
+    val detailWidthStore = if (isDesktop) koinInject<SettingsStore>() else null
     var pathEntries by remember { mutableStateOf(emptyList<PathEntry>()) }
     val folderTyped = pathRef?.folder
     LaunchedEffect(folderTyped, connected, target.profile) {
@@ -624,8 +630,12 @@ fun ChatScreen(
         state = if (readPosition == null || !ownsTranscript) state.copy(historyLoaded = false) else state,
         conversationKey = conversationKey,
         agentScreenChat = state.storedSessionId?.let {
-            if (isDesktop) desktopAgentScreenChat(target.gateway.gatewayUrl.value, target.profile, it) else it
+            desktopAgentScreenChat(target.gateway.gatewayUrl.value, target.profile, it)
         },
+        gatewayScreenChat = state.storedSessionId?.takeIf { ownsTranscript && screenShown && connected }?.let {
+            gatewayAgentScreenChat(target.gateway.gatewayUrl.value, target.profile, it)
+        },
+        gatewayScreenOwner = gatewayScreenOwner,
         savedViewport = { viewModel.viewportFor(conversationKey, target) },
         onSaveViewport = viewModel::saveViewport,
         picker = picker,
@@ -700,6 +710,7 @@ fun ChatScreen(
         attachmentPicker = attachmentPicker.takeIf { isDesktop },
         imagePaste = imagePaste,
         onOpenToolDetails = { if (docked) previewing = null },
+        onDetailRailWidthChange = { width -> detailWidthStore?.update { it.copy(detailRailWidth = width) } },
         rail = railFile?.let { file ->
             {
                 FileViewer(file, onDismiss = { previewing = null }, load = viewModel::previewFile, download = viewModel::downloadFile, docked = true)
@@ -801,6 +812,8 @@ internal fun ChatView(
     /** Isolates the transcript's scroll state across gateways, profiles and chats. */
     conversationKey: Any? = null,
     agentScreenChat: String? = state.storedSessionId,
+    gatewayScreenChat: String? = null,
+    gatewayScreenOwner: ChatSession? = null,
     /** Where the reader was in this chat's list when it last left the screen, read as the list comes back. */
     savedViewport: () -> TranscriptViewport? = { null },
     onSaveViewport: ((TranscriptViewport) -> Unit)? = null,
@@ -880,6 +893,7 @@ internal fun ChatView(
     onOpenSubagentTranscript: () -> Unit = {},
     loadSubagentTranscript: suspend (String, String?) -> SubagentTranscriptRead? = { _, _ -> null },
     onOpenToolDetails: () -> Unit = {},
+    onDetailRailWidthChange: (Int?) -> Unit = {},
 ) {
     val composerFocus = remember { FocusRequester() }
     var focusComment by remember { mutableStateOf<Long?>(null) }
@@ -962,14 +976,17 @@ internal fun ChatView(
     val preview = transcriptPreview
     val previewInRail = isDesktop && rail == null && preview != null
     val showToolDetails = inspectedTools != null && rail == null && subagentInspector == null && preview == null
-    val detailRailWidth = (chatPaneWidth * 0.44f).coerceIn(200.dp, 520.dp).coerceAtMost(chatPaneWidth * 0.62f)
     val inspectorInRail = isDesktop && rail == null && subagentInspector != null
     val desktopRail = if (inspectorInRail) subagentInspector else rail
-    val railWidth = when {
-        inspectorInRail || previewInRail || (showToolDetails && isDesktop) -> detailRailWidth
-        rail != null -> RAIL_WIDTH
-        else -> 0.dp
-    }
+    val desktopDetailsOpen = isDesktop && (showToolDetails || desktopRail != null || previewInRail)
+    val savedRailWidth = LocalAppSettings.current.detailRailWidth
+    var preferredRailWidth by remember(savedRailWidth) { mutableStateOf(savedRailWidth?.dp) }
+    var draggedRailWidth by remember(desktopDetailsOpen) { mutableStateOf<Dp?>(null) }
+    val railLimits = detailRailWidths(chatPaneWidth)
+    val defaultRailWidth = if (rail != null) RAIL_WIDTH else (chatPaneWidth * 0.44f).coerceIn(200.dp, 520.dp)
+    val railWidth = if (desktopDetailsOpen) {
+        (draggedRailWidth ?: preferredRailWidth ?: defaultRailWidth).coerceIn(railLimits)
+    } else 0.dp
     val fullTranscriptOpen = !isDesktop && (subagentInspector != null || preview != null)
     if (!isDesktop && preview != null) key(preview) {
         TranscriptPreviewViewer(preview, docked = false) { transcriptPreview = null }
@@ -1036,6 +1053,16 @@ internal fun ChatView(
                             toolSelection = null
                         }
                     }
+                }
+                if (desktopDetailsOpen && railWidth > 0.dp) {
+                    DetailRailDivider(
+                        railWidth, railLimits, onDragWidth = { draggedRailWidth = it },
+                        onSaveWidth = { width ->
+                            preferredRailWidth = width
+                            onDetailRailWidthChange(width?.value?.roundToInt())
+                        },
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    )
                 }
             }
         }
@@ -1232,6 +1259,9 @@ internal fun ChatView(
                             Modifier.fillMaxSize().then(if (controlHaze != null) Modifier.hazeSource(controlHaze, zIndex = -1f) else Modifier),
                         )
                     }
+                    val gatewayCards = LocalAgentScreens.current.gatewayCards.filter {
+                        gatewayScreenOwner != null && it.owner === gatewayScreenOwner && it.call.chat == gatewayScreenChat && it.isCurrent()
+                    }
                     if (state.historyLoaded && state.messages.isNotEmpty()) {
                         CompositionLocalProvider(
                             LocalMediaLoader provides actions::loadMedia,
@@ -1305,6 +1335,7 @@ internal fun ChatView(
                                     // The voice chat and dictation have the speaker and the microphone.
                                     canReadAloud = hasSpeechPlayback && !voiceOn && !dictation.active,
                                     found = found,
+                                    gatewayCards = gatewayCards,
                                 )
                             }
                         }
@@ -2148,6 +2179,7 @@ private fun Messages(
     canReadAloud: Boolean = true,
     /** The message Find in chat is on, by its key, marked with an outline. */
     found: String? = null,
+    gatewayCards: List<AgentScreens.GatewayCard> = emptyList(),
 ) {
     var confirm by remember { mutableStateOf<Pair<MessageChange, String>?>(null) }
     val lastPrompt = messages.lastOrNull { it is ChatMessage.User }?.key
@@ -2338,6 +2370,10 @@ private fun Messages(
                 layout.totalItemsCount == count && !listState.canScrollForward
         }.collect { atEnd -> if (atEnd) readLatest?.invoke() }
     }
+    val cardsByMessage = remember(messages, gatewayCards) {
+        gatewayCards.mapNotNull { card -> card.anchor?.replyKey(messages)?.let { it to card } }
+            .groupBy({ it.first }, { it.second })
+    }
     val unservable = remember(messages) { unservableEchoes(messages) }
     val unreadLine = remember(messages, unreadFrom, readUpTo) { unreadLineKey(messages, unreadFrom, readUpTo) }
     BoxWithConstraints(Modifier.fillMaxSize().pointerInput(readUpTo) {
@@ -2469,6 +2505,10 @@ private fun Messages(
                         is ChatMessage.Notice -> NoticeLine(message)
                     }
                     }
+                    for (card in cardsByMessage[message.key].orEmpty()) {
+                        key(card.cardId) {
+                            Box(Modifier.padding(top = 12.dp)) { GatewayAgentScreenCard(card) }
+                        }
                     }
                 }
             }
@@ -3946,79 +3986,6 @@ internal fun Reasoning(text: String, streaming: Boolean, messageKey: String? = n
         // On the desktop it's text to select and copy like the reply's, with the same right-click menu.
         if (isDesktop) PlatformCommentableSelection(onAction = null, content = body) else body()
     }
-}
-
-@Composable
-internal fun SubagentTranscriptTools(tools: List<ToolActivity>, messageKey: String) {
-    var expanded by rememberSaveable(messageKey) { mutableStateOf(false) }
-    val icons = remember(tools) { tools.map { toolIcon(it.name) }.distinct().take(3) }
-    val (ranWords, took) = workedLabel(tools)
-    val ran = ranWords.text()
-    val expandedState = stringResource(if (expanded) Res.string.chat_expanded else Res.string.chat_collapsed)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // A pill: up to three of the kinds of tool it used, overlapping, then how many ran and for how long.
-        // It's drawn 36dp tall, but the full touch height around it takes the tap.
-        val pill = CircleShape
-        val interaction = remember { MutableInteractionSource() }
-        Box(
-            Modifier
-                .heightIn(min = MinTouchTarget)
-                .handCursor()
-                .clickable(interaction, indication = null) { expanded = !expanded }
-                .semantics {
-                    contentDescription = listOfNotNull(ran, took).joinToString(", ")
-                    stateDescription = expandedState
-                },
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Row(
-                Modifier
-                    .clearAndSetSemantics {}
-                    .heightIn(min = 36.dp)
-                    .clip(pill)
-                    .background(Theme[colors][surface], pill)
-                    .border(1.dp, Theme[colors][stroke], pill)
-                    .indication(interaction, rememberHoverIndication(Theme[colors][textSecondary]))
-                    .padding(start = 6.dp, end = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) { icons.forEach { ToolKindIcon(it) } }
-                Text(ran, style = Theme[typography][caption], color = Theme[colors][textSecondary])
-                took?.let { Text("· $it", style = Theme[typography][caption], color = Theme[colors][textMuted]) }
-                UnstyledIcon(
-                    if (expanded) Lucide.ChevronDown else Lucide.ChevronRight,
-                    contentDescription = null,
-                    tint = Theme[colors][textMuted],
-                    modifier = Modifier.size(13.dp),
-                )
-            }
-        }
-        if (expanded) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, Theme[colors][stroke], RoundedCornerShape(Theme[radii][radiusMedium]))
-                    .background(Theme[colors][surface], RoundedCornerShape(Theme[radii][radiusMedium]))
-                    .padding(12.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // Keyed, so a row opened before the activity was made again is restored by its tool, not its place.
-                    tools.forEach { key(it.id) { ToolRow(it, messageKey) } }
-                }
-            }
-        }
-    }
-}
-
-/**
- * "Ran 3 tools" and the time they took between them ("42s"), for the reply's tool pill; no time when none
- * was timed. It's the tools' own time added up, not the turn's: calls run side by side each count.
- */
-internal fun workedLabel(tools: List<ToolActivity>): Pair<Words, String?> {
-    val timed = tools.mapNotNull { it.durationSeconds }
-    val ran = Words.Count(Res.plurals.chat_tools_ran, tools.size)
-    return ran to timed.takeIf { it.isNotEmpty() }?.let { formatDuration(it.sum()) }
 }
 
 /** A tool's kind, as a small icon. */
