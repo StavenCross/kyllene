@@ -364,6 +364,7 @@ import dev.hermeskotlin.designsystem.components.DropdownMenu
 import dev.hermeskotlin.designsystem.components.IconButton
 import dev.hermeskotlin.designsystem.components.MenuAction
 import dev.hermeskotlin.core.settings.RunningSend
+import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.designsystem.components.plainTextClipEntry
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -583,6 +584,7 @@ fun ChatScreen(
         derivedStateOf { viewModel.composer.let { pathRefQuery(it.text.toString(), it.selection.end) } }
     }
     val projectsApi = koinInject<ProjectsApi>()
+    val detailWidthStore = if (isDesktop) koinInject<SettingsStore>() else null
     var pathEntries by remember { mutableStateOf(emptyList<PathEntry>()) }
     val folderTyped = pathRef?.folder
     LaunchedEffect(folderTyped, connected, target.profile) {
@@ -700,6 +702,7 @@ fun ChatScreen(
         attachmentPicker = attachmentPicker.takeIf { isDesktop },
         imagePaste = imagePaste,
         onOpenToolDetails = { if (docked) previewing = null },
+        onDetailRailWidthChange = { width -> detailWidthStore?.update { it.copy(detailRailWidth = width) } },
         rail = railFile?.let { file ->
             {
                 FileViewer(file, onDismiss = { previewing = null }, load = viewModel::previewFile, download = viewModel::downloadFile, docked = true)
@@ -880,6 +883,7 @@ internal fun ChatView(
     /** A panel at the right, beside the conversation: the desktop's file rail. */
     rail: (@Composable () -> Unit)? = null,
     onOpenToolDetails: () -> Unit = {},
+    onDetailRailWidthChange: (Int?) -> Unit = {},
 ) {
     val density = LocalDensity.current
     var chatPaneWidth by remember { mutableStateOf(0.dp) }
@@ -899,12 +903,15 @@ internal fun ChatView(
         if (rail != null || inspectedTools == null) toolSelection = null
     }
     val showToolDetails = inspectedTools != null && rail == null
-    val toolRailWidth = (chatPaneWidth * 0.44f).coerceIn(200.dp, 520.dp).coerceAtMost(chatPaneWidth * 0.62f)
-    val railWidth = when {
-        showToolDetails && canDockTools -> toolRailWidth
-        rail != null -> RAIL_WIDTH
-        else -> 0.dp
-    }
+    val desktopDetailsOpen = isDesktop && (showToolDetails || rail != null)
+    val savedRailWidth = LocalAppSettings.current.detailRailWidth
+    var preferredRailWidth by remember(savedRailWidth) { mutableStateOf(savedRailWidth?.dp) }
+    var draggedRailWidth by remember(desktopDetailsOpen) { mutableStateOf<Dp?>(null) }
+    val railLimits = detailRailWidths(chatPaneWidth)
+    val defaultRailWidth = if (rail != null) RAIL_WIDTH else (chatPaneWidth * 0.44f).coerceIn(200.dp, 520.dp)
+    val railWidth = if (desktopDetailsOpen) {
+        (draggedRailWidth ?: preferredRailWidth ?: defaultRailWidth).coerceIn(railLimits)
+    } else 0.dp
     val canAttach = attachmentPicker != null && connected && attachments.size < OutgoingAttachment.MAX_COUNT
     var dropping by remember { mutableStateOf(false) }
     // A chat that stops taking files mid-drag takes its drop target away, which then says nothing more.
@@ -975,6 +982,16 @@ internal fun ChatView(
                             toolSelection = null
                         }
                     }
+                }
+                if (desktopDetailsOpen && railWidth > 0.dp) {
+                    DetailRailDivider(
+                        railWidth, railLimits, onDragWidth = { draggedRailWidth = it },
+                        onSaveWidth = { width ->
+                            preferredRailWidth = width
+                            onDetailRailWidthChange(width?.value?.roundToInt())
+                        },
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    )
                 }
             }
         }

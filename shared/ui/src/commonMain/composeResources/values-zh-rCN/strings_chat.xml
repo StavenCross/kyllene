@@ -14,6 +14,7 @@
     <string name="chat_stop">停止</string>
     <string name="chat_restore">恢复</string>
     <string name="chat_remove_named">移除 %1$s</string>
+    <string name="chat_detail_rail_width">详情面板宽度</string>
     <string name="chat_hide_details">隐藏详情</string>
     <string name="chat_show_details">显示详情</string>
     <string name="chat_details_shown">详情已显示</string>
