@@ -63,7 +63,7 @@
     <string name="chat_file_no_preview">Keine Vorschau für diese Datei</string>
     <string name="chat_file_no_preview_type">Keine Vorschau für %1$s-Dateien</string>
     <string name="chat_file_save_hint">Speichere sie auf dem Telefon oder teile sie mit einer App, die sie öffnet.</string>
-    <string name="chat_file_save_hint_desktop">Speichere sie und öffne sie dann mit einer passenden App.</string>
+    <string name="chat_file_save_hint_desktop">Öffne die Datei in einer anderen App oder speichere eine Kopie.</string>
     <string name="chat_file_get_failed">%1$s ließ sich nicht abrufen. %2$s</string>
     <string name="chat_get_failed_named">%1$s ließ sich nicht vom Gateway abrufen.</string>
 

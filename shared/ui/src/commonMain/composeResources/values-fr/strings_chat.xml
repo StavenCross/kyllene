@@ -63,7 +63,7 @@
     <string name="chat_file_no_preview">Pas d’aperçu pour ce fichier</string>
     <string name="chat_file_no_preview_type">Pas d’aperçu pour les fichiers %1$s</string>
     <string name="chat_file_save_hint">Enregistrez-le sur le téléphone, ou partagez-le avec une app qui l’ouvre.</string>
-    <string name="chat_file_save_hint_desktop">Enregistrez-le, puis ouvrez-le avec une app adaptée.</string>
+    <string name="chat_file_save_hint_desktop">Ouvrez le fichier dans une autre application ou enregistrez une copie.</string>
     <string name="chat_file_get_failed">Impossible de récupérer %1$s. %2$s</string>
     <string name="chat_get_failed_named">Impossible de récupérer %1$s depuis le Gateway.</string>
 

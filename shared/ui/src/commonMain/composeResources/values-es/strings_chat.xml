@@ -63,7 +63,7 @@
     <string name="chat_file_no_preview">No hay vista previa para este archivo</string>
     <string name="chat_file_no_preview_type">No hay vista previa para archivos %1$s</string>
     <string name="chat_file_save_hint">Guárdalo en el teléfono o compártelo con una app que lo abra.</string>
-    <string name="chat_file_save_hint_desktop">Guárdalo y luego ábrelo con una app que pueda.</string>
+    <string name="chat_file_save_hint_desktop">Ábrelo en otra aplicación o guarda una copia.</string>
     <string name="chat_file_get_failed">No se pudo obtener %1$s. %2$s</string>
     <string name="chat_get_failed_named">No se pudo obtener %1$s del Gateway.</string>
 

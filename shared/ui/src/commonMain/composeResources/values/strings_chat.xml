@@ -70,7 +70,7 @@
     <string name="chat_file_no_preview">No preview for this file</string>
     <string name="chat_file_no_preview_type">No preview for %1$s files</string>
     <string name="chat_file_save_hint">Save it to the phone, or share it to an app that opens it.</string>
-    <string name="chat_file_save_hint_desktop">Save it, then open it with an app that can.</string>
+    <string name="chat_file_save_hint_desktop">Open it in another app or save a copy.</string>
     <string name="chat_file_get_failed">Couldn’t get %1$s. %2$s</string>
     <string name="chat_get_failed_named">Couldn’t get %1$s from the gateway.</string>
 
