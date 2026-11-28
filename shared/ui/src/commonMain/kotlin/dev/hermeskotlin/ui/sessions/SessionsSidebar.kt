@@ -285,7 +285,7 @@ import androidx.compose.runtime.SideEffect
 import dev.hermeskotlin.ui.components.ConnectionLine
 import dev.hermeskotlin.ui.components.EmptyState
 import dev.hermeskotlin.ui.components.ListSkeleton
-import dev.hermeskotlin.ui.update.RenameBanner
+import dev.hermeskotlin.ui.update.SupportBanner
 import dev.hermeskotlin.ui.update.UpdateBanner
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -515,8 +515,9 @@ fun SessionsSidebar(
     }
     val pageOpen = scheduledOpen || inboxOpen || routinesOf != null || capabilitiesOpen || configOpen || pluginsOpen || insightsOpen
 
-    // Back steps out of search or the Scheduled / Archived pages before it closes the drawer. On the desktop the
-    // sidebar stays put and a filter is picked like a tab, so Escape leaves it for the chat (stopping a reply).
+    // Back steps out of search or the Scheduled / Archived pages before it leaves the list (on a phone, the app).
+    // On the desktop the sidebar stays put and a filter is picked like a tab, so Escape leaves it for the chat
+    // (stopping a reply).
     // A page beside a docked sidebar is put away by Escape even with the sidebar folded away.
     val filterBacks = !isDesktop && state.filter != SessionListFilter.Recent
     PlatformBackHandler(enabled = visible && (searchOpen || pageOpen || filterBacks) || pageInMain && pageOpen) {
@@ -824,7 +825,7 @@ fun SessionsSidebar(
                         modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
                     )
                 }
-                RenameBanner(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
+                SupportBanner(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
                 UpdateBanner(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
                 // A desktop starts a chat from the top of its sidebar, as desktop chat apps do; the footer
                 // keeps the account. A phone keeps the pill under the thumb.
@@ -1230,7 +1231,7 @@ internal fun SessionsSidebarSample(
                 activeProfile = profiles.firstOrNull()?.name,
                 menuInitiallyOpen = profileMenuOpen,
             )
-            RenameBanner(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
+            SupportBanner(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 val index = remember(projects) { ProjectIndex(projects) }
                 val sections = threadSections(threads, sessions, sessions, selectedProject, index)
@@ -1510,7 +1511,7 @@ internal fun MainHeader(
         }
         // Search looks through chats; the bot roster is short enough to read. The header keeps its height
         // without the pill, so switching sides doesn't move the switch under the finger.
-        if (onSearch != null) SearchPill(onSearch) else Spacer(Modifier.height(maxOf(MinTouchTarget, SEARCH_PILL_HEIGHT)))
+        if (onSearch != null) SearchPill(onSearch) else Spacer(Modifier.height(searchRowHeight()))
     }
 }
 
@@ -1536,6 +1537,14 @@ private val PROFILE_NAME_MAX_WIDTH = 120.dp
 /** How tall the search pill is drawn; the touch target around it can be taller. */
 private val SEARCH_PILL_HEIGHT = 40.dp
 
+/**
+ * The search row: the touch target, and never less than the pill with 4dp over and under it, as a phone's 48dp
+ * gives. The desktop's 36dp target is shorter than the pill, which left what follows (the Chats / Bots switch,
+ * the support card) touching it.
+ */
+@Composable
+private fun searchRowHeight() = maxOf(MinTouchTarget, SEARCH_PILL_HEIGHT + 8.dp)
+
 /** A pill that opens search, in a full-height touch target. */
 @Composable
 private fun SearchPill(onClick: () -> Unit) {
@@ -1544,7 +1553,7 @@ private fun SearchPill(onClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = MinTouchTarget)
+            .heightIn(min = searchRowHeight())
             .padding(horizontal = 14.dp)
             .handCursor()
             .clickable(interaction, indication = null, role = Role.Button, onClick = onClick),

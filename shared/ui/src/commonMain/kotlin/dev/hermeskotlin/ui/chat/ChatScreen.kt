@@ -1,6 +1,7 @@
 package dev.hermeskotlin.ui.chat
 
 import dev.hermeskotlin.ui.gateways.savedLabel
+import dev.hermeskotlin.ui.PlatformBackHandler
 import dev.hermeskotlin.ui.ReleaseFocusWhenKeyboardPutAway
 import dev.hermeskotlin.ui.enterSends
 import dev.hermeskotlin.ui.Shortcut
@@ -25,7 +26,10 @@ import dev.hermeskotlin.ui.windowControlsHeight
 import dev.hermeskotlin.ui.isDesktop
 import dev.hermeskotlin.ui.frostedPanel
 import dev.hermeskotlin.ui.stepChat
+import dev.hermeskotlin.core.chat.ChatSession
+import dev.hermeskotlin.core.phone.AgentScreens
 import dev.hermeskotlin.core.phone.desktopAgentScreenChat
+import dev.hermeskotlin.core.phone.gatewayAgentScreenChat
 import dev.hermeskotlin.core.bots.MentionQuery
 import dev.hermeskotlin.core.chat.ReplyReaction
 import dev.hermeskotlin.core.chat.PathRefKind
@@ -301,6 +305,7 @@ import dev.hermeskotlin.core.chat.TodoStatus
 import dev.hermeskotlin.core.chat.TurnOutcome
 import dev.hermeskotlin.core.chat.compactCount
 import dev.hermeskotlin.core.chat.canEdit
+import dev.hermeskotlin.core.chat.canEditQueued
 import dev.hermeskotlin.core.chat.discardedAfter
 import dev.hermeskotlin.core.chat.regenerateTarget
 import dev.hermeskotlin.core.connection.ConnectionState
@@ -441,6 +446,7 @@ fun ChatScreen(
     LaunchedEffect(target) { viewModel.open(target) }
     val transcript = viewModel.transcript.collectAsStateWithLifecycle().value
     val state = transcript.state
+    val gatewayScreenOwner by viewModel.gatewayScreenOwner.collectAsStateWithLifecycle()
     // The same chat reopened with a new position (a notification for it) keeps the last one until the new one is read.
     val readPosition = viewModel.readPosition.collectAsStateWithLifecycle().value
         ?.takeIf { it.target.copy(readUpTo = null) == target.copy(readUpTo = null) }
@@ -597,6 +603,8 @@ fun ChatScreen(
     val modelPillBounds = remember { mutableStateOf<Rect?>(null) }
     val conversationKey = Triple(target.gateway.gatewayUrl, target.profile, target.storedSessionId)
     val editing = viewModel.editing.collectAsStateWithLifecycle().value
+    // On a phone, Back leaves an edit as Esc does on the desktop, before the chat list behind the chat takes it.
+    PlatformBackHandler(enabled = !isDesktop && editing != null) { viewModel.cancelEdit() }
     val imagePaste = if (ownsTranscript && connected && keysEnabled && !dialogOpen && editing == null &&
         attachments.size < OutgoingAttachment.MAX_COUNT
     ) attachmentPicker.imagePasteModifier { read -> viewModel.pasteImages(target, read) } else Modifier
@@ -616,8 +624,12 @@ fun ChatScreen(
         state = if (readPosition == null || !ownsTranscript) state.copy(historyLoaded = false) else state,
         conversationKey = conversationKey,
         agentScreenChat = state.storedSessionId?.let {
-            if (isDesktop) desktopAgentScreenChat(target.gateway.gatewayUrl.value, target.profile, it) else it
+            desktopAgentScreenChat(target.gateway.gatewayUrl.value, target.profile, it)
         },
+        gatewayScreenChat = state.storedSessionId?.takeIf { ownsTranscript && screenShown && connected }?.let {
+            gatewayAgentScreenChat(target.gateway.gatewayUrl.value, target.profile, it)
+        },
+        gatewayScreenOwner = gatewayScreenOwner,
         savedViewport = { viewModel.viewportFor(conversationKey, target) },
         onSaveViewport = viewModel::saveViewport,
         picker = picker,
@@ -788,6 +800,8 @@ internal fun ChatView(
     /** Isolates the transcript's scroll state across gateways, profiles and chats. */
     conversationKey: Any? = null,
     agentScreenChat: String? = state.storedSessionId,
+    gatewayScreenChat: String? = null,
+    gatewayScreenOwner: ChatSession? = null,
     /** Where the reader was in this chat's list when it last left the screen, read as the list comes back. */
     savedViewport: () -> TranscriptViewport? = { null },
     onSaveViewport: ((TranscriptViewport) -> Unit)? = null,
@@ -981,8 +995,9 @@ internal fun ChatView(
             }
             var foundKey by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(findText, findOpen) { foundKey = matches.lastOrNull() }
-            val match = matches.indexOf(foundKey)
-            val found = foundKey.takeIf { findOpen && match >= 0 }
+            LaunchedEffect(matches) { if (foundKey !in matches) foundKey = matches.lastOrNull() }
+            val (activeFoundKey, match) = resolveFoundMatch(matches, foundKey)
+            val found = activeFoundKey.takeIf { findOpen && match >= 0 }
             LaunchedEffect(found) {
                 val index = listed.indexOfFirst { it.key == found }
                 if (index >= 0) {
@@ -1125,6 +1140,9 @@ internal fun ChatView(
                             Modifier.fillMaxSize().then(if (controlHaze != null) Modifier.hazeSource(controlHaze, zIndex = -1f) else Modifier),
                         )
                     }
+                    val gatewayCards = LocalAgentScreens.current.gatewayCards.filter {
+                        gatewayScreenOwner != null && it.owner === gatewayScreenOwner && it.call.chat == gatewayScreenChat && it.isCurrent()
+                    }
                     if (state.historyLoaded && state.messages.isNotEmpty()) {
                         CompositionLocalProvider(
                             LocalMediaLoader provides actions::loadMedia,
@@ -1169,6 +1187,7 @@ internal fun ChatView(
                                     // A saved copy may lack what changed since; edits wait for the gateway's transcript.
                                     canChange = state.canChangeChat(connected && state.savedCopyAt == null),
                                     editing = editing,
+                                    replaceable = state.replaceableAdmissions - state.replacingAdmissions,
                                     readUpTo = readUpTo,
                                     onReadLatest = onReadLatest,
                                     reading = readAloud.key,
@@ -1176,6 +1195,7 @@ internal fun ChatView(
                                     // The voice chat and dictation have the speaker and the microphone.
                                     canReadAloud = hasSpeechPlayback && !voiceOn && !dictation.active,
                                     found = found,
+                                    gatewayCards = gatewayCards,
                                 )
                             }
                         }
@@ -1284,6 +1304,7 @@ internal fun ChatView(
                         onRef = onRef,
                         notice = notice,
                         editing = editing != null,
+                        editingQueued = editing != null && state.messages.any { it.key == editing && it is ChatMessage.User && it.queued },
                         comments = comments,
                         focusComment = focusComment,
                         onCommentFocused = { focusComment = null },
@@ -1418,6 +1439,8 @@ private fun ColumnScope.Dock(
     onRef: (RefChoice) -> Unit,
     notice: String?,
     editing: Boolean,
+    /** The prompt being edited is still queued: its edit changes it where it waits, and can go mid-turn. */
+    editingQueued: Boolean,
     comments: List<PendingComment>,
     focusComment: Long?,
     onCommentFocused: () -> Unit,
@@ -1580,14 +1603,16 @@ private fun ColumnScope.Dock(
             }
             if (editing) {
                 Banner(
-                    stringResource(Res.string.chat_editing_banner),
+                    stringResource(if (editingQueued) Res.string.chat_editing_queued_banner else Res.string.chat_editing_banner),
                     actionLabel = stringResource(Res.string.common_cancel),
                     onAction = actions::cancelEdit,
                     icon = Lucide.Pencil,
                 )
             }
             Composer(
-                editing = editing,
+                // A queued prompt's edit cuts nothing, so it isn't held for the turn's end as a rewind is.
+                editing = editing && !editingQueued,
+                editingQueued = editingQueued,
                 hazeState = panelHaze,
                 reconnectingInBanner = reconnectingInBanner,
                 actions = actions,
@@ -1643,6 +1668,7 @@ private fun ComposerNotice.text(): String = when (this) {
     is ComposerNotice.Said -> text
     ComposerNotice.PromptNotSent -> stringResource(Res.string.chat_notice_prompt_not_sent)
     ComposerNotice.CallNotStarted -> stringResource(Res.string.chat_notice_call_not_started)
+    ComposerNotice.QueuedEditOvertaken -> stringResource(Res.string.chat_notice_queued_edit_overtaken)
     ComposerNotice.ImagePasteTimedOut -> stringResource(Res.string.android_attach_photo_failed)
     is ComposerNotice.TooManyAttachments -> stringResource(Res.string.chat_notice_too_many_files, max)
     is ComposerNotice.FileTooLarge -> stringResource(Res.string.chat_notice_file_too_large, name, megabytes)
@@ -2000,6 +2026,8 @@ private fun Messages(
     connected: Boolean,
     canChange: Boolean,
     editing: String?,
+    /** The queued admissions the gateway offers to replace ([ChatState.replaceableAdmissions]). */
+    replaceable: Set<String> = emptySet(),
     /** How far the chat had been read when it was opened (epoch seconds); later messages are marked new. */
     readUpTo: Double? = null,
     onReadLatest: (() -> Unit)? = null,
@@ -2011,6 +2039,7 @@ private fun Messages(
     canReadAloud: Boolean = true,
     /** The message Find in chat is on, by its key, marked with an outline. */
     found: String? = null,
+    gatewayCards: List<AgentScreens.GatewayCard> = emptyList(),
 ) {
     var confirm by remember { mutableStateOf<Pair<MessageChange, String>?>(null) }
     val lastPrompt = messages.lastOrNull { it is ChatMessage.User }?.key
@@ -2019,8 +2048,8 @@ private fun Messages(
     }?.key
     val faces = LocalBotFaces.current
     val partners = remember(messages, faces) { messages.map { exchangePartner(it, faces) } }
-    // The rewind rules read only the messages.
-    val chat = remember(messages) { ChatState(messages = messages) }
+    // The rewind rules read only the messages; a queued edit, the admissions the gateway can replace too.
+    val chat = remember(messages, replaceable) { ChatState(messages = messages, replaceableAdmissions = replaceable) }
     ConfirmChange(confirm, canChange, lastPrompt, chat, actions, onDismiss = { confirm = null })
     // Edit and branch only show while the chat can change; each asks before it does anything.
     fun ask(change: MessageChange, key: String): (() -> Unit)? = if (canChange) ({ confirm = change to key }) else null
@@ -2116,7 +2145,8 @@ private fun Messages(
     LaunchedEffect(awayFromBottom, messages) {
         val arrivedWithPage = oldest.isOlderThan(replySeen.oldest) &&
             messages.replyArrivedWithPage(previousReplyMessages, replySeen.mark)
-        replySeen = replySeen.next(awayFromBottom, oldest, tail, arrivedWithPage)
+        val onlyDismissedCards = messages.onlyDismissedSideCardsFrom(previousReplyMessages)
+        replySeen = replySeen.next(awayFromBottom, oldest, tail, arrivedWithPage, onlyDismissedCards)
         previousReplyMessages = messages
     }
     val newBelow = awayFromBottom && replySeen.new
@@ -2199,6 +2229,10 @@ private fun Messages(
             lastVisible != null && lastVisible.key == lastKey &&
                 layout.totalItemsCount == count && !listState.canScrollForward
         }.collect { atEnd -> if (atEnd) readLatest?.invoke() }
+    }
+    val cardsByMessage = remember(messages, gatewayCards) {
+        gatewayCards.mapNotNull { card -> card.anchor?.replyKey(messages)?.let { it to card } }
+            .groupBy({ it.first }, { it.second })
     }
     val unservable = remember(messages) { unservableEchoes(messages) }
     val unreadLine = remember(messages, unreadFrom, readUpTo) { unreadLineKey(messages, unreadFrom, readUpTo) }
@@ -2284,8 +2318,13 @@ private fun Messages(
                             connected,
                             // Any prompt with a stored row is edited in place; the last one without can still go through /undo.
                             // Not while the prompt is still on its way or its delivery is in doubt.
-                            editLabel = stringResource(if (chat.canEdit(message.key)) Res.string.chat_edit else Res.string.chat_edit_last_prompt),
-                            onEdit = if (chat.canEdit(message.key)) {
+                            // A queued one is edited where it waits, on a gateway that offers that.
+                            editLabel = stringResource(
+                                if (chat.canEdit(message.key) || chat.canEditQueued(message.key)) Res.string.chat_edit else Res.string.chat_edit_last_prompt,
+                            ),
+                            onEdit = if (chat.canEditQueued(message.key)) {
+                                { actions.startQueuedEdit(message.key) }.takeIf { connected }
+                            } else if (chat.canEdit(message.key)) {
                                 rewind(MessageChange.Edit, message.key, message.key) { actions.startEdit(message.key) }
                             } else {
                                 ask(MessageChange.EditLastPrompt, message.key)
@@ -2320,9 +2359,14 @@ private fun Messages(
                             if (to != null && !message.streaming) RepliedToFold(to, message.text, reply) else reply()
                         }
                         is ChatMessage.Event -> TranscriptEventRow(message.event)
-                        is ChatMessage.Command -> CommandOutput(message)
+                        is ChatMessage.Command -> CommandOutput(message) { actions.dismissSideCard(message) }
                         is ChatMessage.Notice -> NoticeLine(message)
                     }
+                    }
+                    for (card in cardsByMessage[message.key].orEmpty()) {
+                        key(card.cardId) {
+                            Box(Modifier.padding(top = 12.dp)) { GatewayAgentScreenCard(card) }
+                        }
                     }
                 }
             }
@@ -2527,6 +2571,19 @@ internal fun List<ChatMessage>.replyArrivedWithPage(previous: List<ChatMessage>,
 }
 
 /**
+ * True when this list differs from [previous] only because one or more finished side-task cards were dismissed,
+ * with no new prompt, reply or command text arriving in the same update.
+ */
+internal fun List<ChatMessage>.onlyDismissedSideCardsFrom(previous: List<ChatMessage>): Boolean {
+    val keptKeys = mapTo(HashSet()) { it.key }
+    val withoutDismissed = previous.filterNot { it is ChatMessage.Command && it.canDismiss && it.key !in keptKeys }
+    return withoutDismissed.size < previous.size &&
+        withoutDismissed.size == size &&
+        withoutDismissed.zip(this).all { (before, after) -> before.key == after.key } &&
+        withoutDismissed.replyMark() == replyMark()
+}
+
+/**
  * The [replyMark] and oldest loaded row as they last were, and whether reply text has come ([new]) since the reader
  * left the end. It stays new until they are back there, even if a later turn brings the mark back to what it was.
  */
@@ -2537,8 +2594,18 @@ internal data class ReplySeen(val oldest: String?, val mark: Pair<Int, Int>, val
      * (see [replyArrivedWithPage]). [mark] is kept but not compared: the page can bring the prompt of a turn that was
      * only partly loaded, which changes the mark without any new reply.
      */
-    fun next(away: Boolean, oldest: String?, mark: Pair<Int, Int>, arrivedWithPage: Boolean = false): ReplySeen {
-        val arrived = if (oldest.isOlderThan(this.oldest)) arrivedWithPage else mark != this.mark
+    fun next(
+        away: Boolean,
+        oldest: String?,
+        mark: Pair<Int, Int>,
+        arrivedWithPage: Boolean = false,
+        onlyDismissedCards: Boolean = false,
+    ): ReplySeen {
+        val arrived = when {
+            onlyDismissedCards -> false
+            oldest.isOlderThan(this.oldest) -> arrivedWithPage
+            else -> mark != this.mark
+        }
         return ReplySeen(oldest, mark, new = away && (new || arrived))
     }
 }
@@ -3418,7 +3485,7 @@ internal const val UNREAD_PAGE_LIMIT = 5
 
 /** A slash command and what it printed: a quiet outlined card in the terminal face, local to this device. */
 @Composable
-private fun CommandOutput(message: ChatMessage.Command) {
+private fun CommandOutput(message: ChatMessage.Command, onDismiss: () -> Unit) {
     val shape = RoundedCornerShape(Theme[radii][radiusMedium])
     Column(
         Modifier
@@ -3436,7 +3503,13 @@ private fun CommandOutput(message: ChatMessage.Command) {
                 color = Theme[colors][textSecondary],
                 modifier = Modifier.weight(1f),
             )
-            if (message.running) Spinner(Modifier.size(12.dp))
+            when {
+                message.running && message.isSideTask -> Box(Modifier.size(MinTouchTarget), contentAlignment = Alignment.Center) {
+                    Spinner(Modifier.size(12.dp))
+                }
+                message.running -> Spinner(Modifier.size(12.dp))
+                message.canDismiss -> IconButton(Lucide.X, contentDescription = stringResource(Res.string.chat_dismiss), onClick = onDismiss)
+            }
         }
         if (message.output.isNotEmpty()) {
             val source = remember(message.key, message.command) {
@@ -4173,6 +4246,8 @@ private fun Composer(
     onVoiceChat: () -> Unit,
     /** A prompt is being edited: it can't go out mid-turn, as the gateway won't cut the chat while a task runs. */
     editing: Boolean,
+    /** A queued prompt is being edited: Send changes it where it waits, so it goes mid-turn, with no Queue or Steer. */
+    editingQueued: Boolean = false,
     imagePaste: Modifier,
     /** The desktop's keys in the field before its own: a paste that attaches, a suggestion picked. */
     onKey: (KeyEvent) -> Boolean = { false },
@@ -4280,7 +4355,7 @@ private fun Composer(
                     ) {
                         AttachButton(onClick = onAttach, enabled = attachments.size < OutgoingAttachment.MAX_COUNT)
                         // Queue and Steer need the room mid-task, so the model pill folds to its sparkle meanwhile.
-                        val segments = state.running && hasText && !editing && !command
+                        val segments = state.running && hasText && !editing && !editingQueued && !command
                         Box(Modifier.weight(1f).padding(start = 2.dp), contentAlignment = Alignment.CenterStart) {
                             ModelPill(state, picker, onClick = onOpenModels, compact = segments)
                         }
@@ -4288,7 +4363,7 @@ private fun Composer(
                         // Voice chat waits for the task to end, so while one runs its place goes to the ways to send.
                         if (hasSpeechPlayback && !state.running) Snug { VoiceChatButton(onClick = onVoiceChat, enabled = connected && !dictation.active) }
                         // Stop is on the live task card above; a message typed meanwhile is queued or steers the task.
-                        if (state.running && hasText && !editing) {
+                        if (state.running && hasText && !editing && !editingQueued) {
                             if (command) {
                                 // A command runs at once; there's nothing to choose.
                                 Snug { SendButton(SendIcon.Send, onClick = { actions.send() }, enabled = connected) }
@@ -4302,7 +4377,10 @@ private fun Composer(
                             }
                         } else {
                             // While a task runs this only waits: nothing typed yet, or an edit, which goes once it ends.
-                            Snug { SendButton(SendIcon.Send, onClick = { actions.send() }, enabled = connected && hasText && !state.running) }
+                            // A queued prompt's edit goes at once: it changes the prompt where it waits.
+                            Snug {
+                                SendButton(SendIcon.Send, onClick = { actions.send() }, enabled = connected && hasText && (!state.running || editingQueued))
+                            }
                         }
                     }
                 }
