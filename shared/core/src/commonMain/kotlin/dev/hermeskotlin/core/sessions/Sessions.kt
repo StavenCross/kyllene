@@ -2,6 +2,7 @@ package dev.hermeskotlin.core.sessions
 
 import dev.hermeskotlin.core.chat.displayMetadataObject
 import dev.hermeskotlin.core.chat.userReactionEmoji
+import dev.hermeskotlin.core.network.HermesJson
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -42,7 +43,7 @@ data class SessionSummary(
      * marked the chat unread, or it had activity after a client last marked it read. False from a gateway without it.
      */
     @Serializable(with = LenientBooleanSerializer::class) val unread: Boolean = false,
-    /** Shared read watermark; null on untracked chats/older gateways, zero for explicit mark-unread. */
+    /** Shared read watermark; null on untracked chats, zero for explicit mark-unread. */
     @SerialName("last_read_at") val lastReadAt: Double? = null,
 ) {
     /** What a list shows as the name: the title, else the first prompt, else a placeholder. */
@@ -155,7 +156,20 @@ data class SessionMessage(
     @Serializable(with = LenientBooleanSerializer::class) val compacted: Boolean = false,
     @SerialName("display_reasoning") val displayReasoning: String? = null,
     @SerialName("display_commentary") val displayCommentary: List<String>? = null,
+    @SerialName("message_uid") val messageUid: String? = null,
+    @SerialName("absorbed_message_uids") val absorbedMessageUids: JsonElement? = null,
 ) {
+    /** A merged compaction carrier has its own UID and names the request it absorbed separately. */
+    internal val requestUids: List<String>
+        get() {
+            val absorbed = when (val value = absorbedMessageUids) {
+                is JsonPrimitive -> value.contentOrNull?.let { runCatching { HermesJson.parseToJsonElement(it) }.getOrNull() }
+                else -> value
+            }
+            val sources = (absorbed as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.stringOrNull() }
+            return sources.ifEmpty { listOfNotNull(messageUid) }
+        }
+
     val userReaction: String? get() = userReactionEmoji(displayMetadataObject(displayMetadata)?.get("reactions"))
 
     /** The part of a reply a stopped turn had streamed, which hermes-agent marks (v0.23.4 agent/turn_api_call.py). */
@@ -163,6 +177,7 @@ data class SessionMessage(
 
     /** Plain text to render: the display projection when present, else the stored content. */
     val text: String get() = (displayContent ?: content).plainText()
+    internal val storedText: String get() = content.plainText()
 
     /** Public progress supplied by the gateway, in transcript order. */
     val commentary: List<String>
@@ -180,9 +195,10 @@ data class SessionMessage(
             var lines = legacy.replace("\r\n", "\n")
             updates.map { it.replace("\r\n", "\n") }.sortedByDescending { it.length }.forEach { update ->
                 val wholeLines = Regex("^" + Regex.escape(update) + "$", RegexOption.MULTILINE)
-                lines = wholeLines.replace(lines, "")
+                lines = wholeLines.replace(lines, TAKEN_OUT)
             }
-            return lines.trim()
+            // A removed paragraph leaves its blank lines behind: one blank line parts what's left there, and only there.
+            return lines.replace(TAKEN_OUT_WITH_BLANK_LINES, "\n\n").trim()
         }
 
     /** Image parts of a multimodal row (`image_url` / `image` / `input_image`). */
@@ -217,6 +233,10 @@ data class SessionMessagesPage(
 )
 
 private val IMAGE_PART_TYPES = setOf("image_url", "image", "input_image")
+
+// Marks a commentary line taken out of old saved reasoning, so only the blank lines around it are folded.
+private const val TAKEN_OUT = ""
+private val TAKEN_OUT_WITH_BLANK_LINES = Regex("\n*$TAKEN_OUT(?:\n*$TAKEN_OUT)*\n*")
 
 /** Keep the first display copy when only the line endings differ. */
 internal fun List<String>.distinctCommentary(): List<String> =

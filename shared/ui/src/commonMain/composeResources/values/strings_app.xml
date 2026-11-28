@@ -211,9 +211,6 @@
     <string name="wallpaper_not_an_image">That file isn’t an image Kyllene can read.</string>
     <string name="wallpaper_read_failed">Couldn’t read that picture.</string>
 
-    <string name="update_renamed">Herald is now Kyllene</string>
-    <string name="update_renamed_detail">Same app with a new name and icon. Your sign-in, chats and settings stay.</string>
-    <string name="update_got_it">Got it</string>
 
     <string name="gateways_title">Gateways</string>
     <string name="gateways_detail">Each gateway is its own Hermes, with its own profiles and chats.</string>
@@ -299,6 +296,8 @@
     <string name="signin_with_browser">Sign in with browser</string>
     <string name="signin_waiting_browser">Waiting for the browser…</string>
     <string name="signin_finish_in_browser">Finish signing in on the page that opened. Kyllene comes back by itself when you’re done.</string>
+    <string name="signin_battery_restricted">Battery usage for Kyllene is Restricted, so Android won’t let the browser hand the sign-in back. Allow background use, then come back here.</string>
+    <string name="signin_battery_settings">Battery settings</string>
     <string name="signin_different_gateway">Use a different gateway</string>
     <string name="signin_gateway_chip">Gateway %1$s</string>
     <string name="signin_or">or</string>
@@ -352,7 +351,8 @@
     <string name="check_fix_wait_a_minute">Wait a minute, then try again.</string>
     <string name="check_fix_sign_in_or_update">Sign in again; if it keeps failing, update Hermes.</string>
     <string name="check_fix_update_hermes_try_again">Update Hermes, then try again.</string>
-    <string name="check_fix_update_hermes">Update Hermes on the server.</string>
+    <string name="hermes_unsupported_version">Kyllene needs Hermes Agent 0.22 or newer. Run `hermes update`.</string>
+    <string name="check_fix_proxy_forwards_ws">Check that the proxy forwards /api/ws.</string>
     <string name="check_fix_agent_running">Check that the agent gateway is running on the server. Behind a proxy, allow WebSocket upgrades on /api/ws.</string>
     <string name="check_fix_exact_address">Use the exact address the dashboard is configured for, and check that embedded chat is enabled.</string>
     <string name="check_fix_access_token_or_proxy">Behind Cloudflare Access, add a service token for this gateway. Otherwise check that the proxy forwards /api/ws.</string>
