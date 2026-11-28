@@ -972,10 +972,13 @@ internal fun ChatView(
     LaunchedEffect(rail != null, inspectedTools != null) {
         if (rail != null || inspectedTools == null) toolSelection = null
     }
-    val showToolDetails = inspectedTools != null && rail == null && subagentInspector == null
+    var transcriptPreview by remember(conversationKey) { mutableStateOf<TranscriptPreview?>(null) }
+    val preview = transcriptPreview
+    val previewInRail = isDesktop && rail == null && preview != null
+    val showToolDetails = inspectedTools != null && rail == null && subagentInspector == null && preview == null
     val inspectorInRail = isDesktop && rail == null && subagentInspector != null
     val desktopRail = if (inspectorInRail) subagentInspector else rail
-    val desktopDetailsOpen = isDesktop && (showToolDetails || desktopRail != null)
+    val desktopDetailsOpen = isDesktop && (showToolDetails || desktopRail != null || previewInRail)
     val savedRailWidth = LocalAppSettings.current.detailRailWidth
     var preferredRailWidth by remember(savedRailWidth) { mutableStateOf(savedRailWidth?.dp) }
     var draggedRailWidth by remember(desktopDetailsOpen) { mutableStateOf<Dp?>(null) }
@@ -984,8 +987,11 @@ internal fun ChatView(
     val railWidth = if (desktopDetailsOpen) {
         (draggedRailWidth ?: preferredRailWidth ?: defaultRailWidth).coerceIn(railLimits)
     } else 0.dp
-    val fullTranscriptOpen = !isDesktop && subagentInspector != null
-    if (fullTranscriptOpen) {
+    val fullTranscriptOpen = !isDesktop && (subagentInspector != null || preview != null)
+    if (!isDesktop && preview != null) key(preview) {
+        TranscriptPreviewViewer(preview, docked = false) { transcriptPreview = null }
+    }
+    if (!isDesktop && subagentInspector != null) {
         WindowDialog(onDismissRequest = ::closeSubagents, properties = fullScreenDialogProperties()) {
             val backgroundColor = Theme[colors][background]
             DialogStatusBarAppearance(lightBackground = backgroundColor.luminance() > 0.5f)
@@ -1032,12 +1038,15 @@ internal fun ChatView(
             if (state.historyLoaded && state.messages.none { it.key == key }) actions.stopReading()
         }
         // The rail takes the right of the screen; the conversation centres in what's left.
-        if (desktopRail != null || showToolDetails) {
+        if (desktopRail != null || showToolDetails || previewInRail) {
             Box(
                 Modifier.align(Alignment.TopEnd).width(railWidth).fillMaxHeight()
                     .background(Theme[colors][background]).border(1.dp, Theme[colors][stroke]),
             ) {
                 if (desktopRail != null) desktopRail()
+                else if (previewInRail && preview != null) key(preview) {
+                    TranscriptPreviewViewer(preview, docked = true) { transcriptPreview = null }
+                }
                 else if (inspectedTools != null && selectedTool != null) key(toolReplyKey) {
                     CompositionLocalProvider(LocalCommentHost provides commentHost) {
                         ToolDetailsViewer(inspectedTools, selectedTool.first, selectedTool.second, docked = isDesktop) {
@@ -1266,6 +1275,7 @@ internal fun ChatView(
                                 onStop = (actions::stopSubagent).takeIf { connected && state.runtimeSessionId != null },
                             ) { reply, selected ->
                                 toolSelection = null
+                                transcriptPreview = null
                                 onOpenSubagentTranscript()
                                 selectedDelegationReply = reply
                                 selectedSubagentKey = selected
@@ -1288,8 +1298,15 @@ internal fun ChatView(
                             LocalCommentHost provides commentHost,
                             LocalOpenToolDetails provides { replyKey, toolId ->
                                 closeSubagents()
+                                transcriptPreview = null
                                 onOpenToolDetails()
                                 toolSelection = replyKey to toolId
+                            },
+                            LocalOpenTranscriptPreview provides { selected ->
+                                closeSubagents()
+                                toolSelection = null
+                                onOpenToolDetails()
+                                transcriptPreview = selected
                             },
                         ) {
                             key(conversationKey) {
@@ -2381,6 +2398,7 @@ private fun Messages(
         // The list spans the pane, so the wheel and the scrollbar work at its edges; what's read keeps to the
         // reading width in the middle. Desktop messages sit a little closer together, as a pointer's eye reads them.
         val side = 16.dp + ((maxWidth - READING_WIDTH) / 2).coerceAtLeast(0.dp)
+        val inlineBudget = transcriptInlineBudget(maxHeight - controlsInset)
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().nestedScroll(readBack)
@@ -2456,7 +2474,7 @@ private fun Messages(
                             onBranch = ask(MessageChange.Branch, message.key).takeIf { !message.pending && message.check == null },
                             editing = editing == message.key,
                         )
-                        is ChatMessage.Assistant -> {
+                        is ChatMessage.Assistant -> CompositionLocalProvider(LocalTranscriptInlineBudget provides inlineBudget) {
                             val reply = @Composable {
                                 AssistantReply(
                                     message,
@@ -2481,7 +2499,9 @@ private fun Messages(
                             val to = message.repliedTo
                             if (to != null && !message.streaming) RepliedToFold(to, message.text, reply) else reply()
                         }
-                        is ChatMessage.Event -> TranscriptEventRow(message.event)
+                        is ChatMessage.Event -> CompositionLocalProvider(LocalTranscriptInlineBudget provides inlineBudget) {
+                            TranscriptEventRow(message.event)
+                        }
                         is ChatMessage.Command -> CommandOutput(message) { actions.dismissSideCard(message) }
                         is ChatMessage.Notice -> NoticeLine(message)
                     }
@@ -3306,7 +3326,7 @@ internal fun AssistantReply(
     ) {
         ReplyHeader(message.timestamp.takeUnless { message.streaming })
         // What's happening now is said once, above the composer; the reply keeps only what it's made of.
-        if (showReasoning) Reasoning(message.reasoning, message.streaming)
+        if (showReasoning) Reasoning(message.reasoning, message.streaming, message.key)
         message.commentary.forEach { update ->
             MarkdownText(remember(update) { linkFileUris(update) })
         }
@@ -3915,7 +3935,8 @@ internal fun Disclosure(
     label: String,
     expanded: Boolean,
     onToggle: () -> Unit,
-    content: @Composable () -> Unit,
+    opensPreview: Boolean = false,
+    content: (@Composable () -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -3926,13 +3947,21 @@ internal fun Disclosure(
             icon()
             Text(label, style = Theme[typography][bodySmall], color = Theme[colors][textSecondary], maxLines = 1, overflow = TextOverflow.Ellipsis)
             UnstyledIcon(
-                if (expanded) Lucide.ChevronDown else Lucide.ChevronRight,
-                contentDescription = stringResource(if (expanded) Res.string.chat_collapse else Res.string.chat_expand),
+                when {
+                    opensPreview -> Lucide.FileText
+                    expanded -> Lucide.ChevronDown
+                    else -> Lucide.ChevronRight
+                },
+                contentDescription = stringResource(when {
+                    opensPreview -> Res.string.chat_show_details
+                    expanded -> Res.string.chat_collapse
+                    else -> Res.string.chat_expand
+                }),
                 tint = Theme[colors][textTertiary],
                 modifier = Modifier.size(14.dp),
             )
         }
-        if (expanded) {
+        if (expanded && content != null) {
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -3946,13 +3975,11 @@ internal fun Disclosure(
 
 /** The reply's reasoning, folded; live progress is the dock's to show. Opened, it stays open when the activity is made again. */
 @Composable
-internal fun Reasoning(text: String, streaming: Boolean) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    Disclosure(
+internal fun Reasoning(text: String, streaming: Boolean, messageKey: String? = null) {
+    AdaptiveTranscriptDisclosure(
         icon = { UnstyledIcon(Lucide.Brain, contentDescription = null, tint = Theme[colors][textTertiary], modifier = Modifier.size(16.dp)) },
         label = stringResource(Res.string.chat_usage_reasoning),
-        expanded = expanded,
-        onToggle = { expanded = !expanded },
+        disclosureKey = messageKey,
     ) {
         val body = @Composable {
             MarkdownText(text.trim(), streaming = streaming, textStyle = Theme[typography][bodySmall].copy(color = Theme[colors][textSecondary]))
